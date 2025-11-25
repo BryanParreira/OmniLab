@@ -1,0 +1,78 @@
+# =========================
+# Node Essentials
+# =========================
+node_modules/
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+pnpm-debug.log*
+package-lock.json
+npm-cache/
+.pnpm-store/
+
+# ENV
+.env
+.env.local
+.env.*.local
+
+# =========================
+# Build Outputs
+# =========================
+dist/
+build/
+out/
+release/
+coverage/
+
+# Electron packaged apps
+*.asar
+*.asar.unpacked/
+*.app
+*.exe
+*.dll
+*.dmg
+*.deb
+*.rpm
+
+# Electron intermediate build outputs
+/.webpack
+/.vite
+/.parcel
+
+# Next.js (if you use it)
+.next/
+out/
+
+# Vite
+vite.config.ts.timestamp-*
+*.tsbuildinfo
+
+# =========================
+# OS / Editor Files
+# =========================
+.DS_Store
+Thumbs.db
+
+# macOS
+.AppleDouble
+.LSOverride
+Icon?
+._*
+
+# Linux
+.Trash-*
+
+# Windows
+desktop.ini
+
+# IDE and Editor
+.vscode/
+.idea/
+*.swp
+*.swo
+
+# =========================
+# Logs
+# =========================
+logs/
+*.log

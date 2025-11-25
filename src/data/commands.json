@@ -1,0 +1,47 @@
+[
+  {
+    "id": "reload",
+    "label": "Reload Window",
+    "type": "system",
+    "icon": "RefreshCw"
+  },
+  {
+    "id": "settings",
+    "label": "Open Settings",
+    "type": "system",
+    "icon": "Settings"
+  },
+  {
+    "id": "toggle_dark",
+    "label": "Toggle Dark Mode",
+    "type": "system",
+    "icon": "Moon"
+  },
+  {
+    "id": "uuid",
+    "label": "Generate UUID",
+    "type": "action",
+    "action": "generate_uuid",
+    "icon": "Key"
+  },
+  {
+    "id": "json",
+    "label": "JSON Formatter",
+    "type": "tool",
+    "component": "JsonTool",
+    "icon": "Braces"
+  },
+  {
+    "id": "regex",
+    "label": "Regex Tester",
+    "type": "tool",
+    "component": "RegexTool",
+    "icon": "Regex"
+  },
+  {
+    "id": "ai_chat",
+    "label": "Ask AI",
+    "type": "ai",
+    "icon": "Sparkles"
+  }
+]
