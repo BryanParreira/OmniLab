@@ -4,7 +4,7 @@ import Markdown from 'react-markdown';
 import remarkGfm from 'remark-gfm'; 
 import { Prism as SyntaxHighlighter } from 'react-syntax-highlighter';
 import { vscDarkPlus } from 'react-syntax-highlighter/dist/esm/styles/prism';
-import { ArrowUp, Bot, User, StopCircle, Download, Check, Info, Code2, Eye, Sparkles, ChevronDown, ChevronRight, Layout, Globe } from 'lucide-react';
+import { ArrowUp, Bot, User, StopCircle, Download, Check, Info, Code2, Eye, Sparkles, ChevronDown, ChevronRight, Layout, Globe, Zap, Bug, BookOpen, Terminal } from 'lucide-react';
 import mermaid from 'mermaid'; 
 import clsx from 'clsx'; 
 
@@ -50,43 +50,24 @@ const CodeBlock = ({ language, children }) => {
 const Callout = ({ children }) => (<div className="my-4 border-l-2 border-indigo-500 bg-indigo-500/5 p-4 rounded-r-lg text-gray-300 text-sm flex gap-4 shadow-sm"><Info size={20} className="text-indigo-400 shrink-0" /><div className="prose prose-invert prose-sm max-w-none leading-relaxed">{children}</div></div>);
 
 const MessageBubble = ({ msg, isStreaming }) => {
-  let thoughtContent = null;
-  let mainContent = msg.content;
-
-  // --- THE NUCLEAR FIX ---
-  const openTag = "<thinking>";
-  const closeTag = "</thinking>";
-  
-  // Find the last closing tag to handle cases where the stream is partial
+  let thoughtContent = null; let mainContent = msg.content;
+  const openTag = "<thinking>"; const closeTag = "</thinking>";
   const closeIndex = msg.content.lastIndexOf(closeTag);
 
   if (closeIndex !== -1) {
-    // We found a closing tag. Everything before it is thought.
-    // We strip any text that appeared BEFORE the <thinking> tag as well (e.g. "Sure!")
     const rawThought = msg.content.substring(0, closeIndex);
     const startOfThought = rawThought.indexOf(openTag);
-    if (startOfThought !== -1) {
-       thoughtContent = rawThought.substring(startOfThought + openTag.length);
-    } else {
-       thoughtContent = rawThought; // Fallback
-    }
+    thoughtContent = startOfThought !== -1 ? rawThought.substring(startOfThought + openTag.length) : rawThought;
     mainContent = msg.content.substring(closeIndex + closeTag.length);
   } else if (msg.content.includes(openTag)) {
-    // Streaming... show as thought, hide main content
     const startOfThought = msg.content.indexOf(openTag);
     thoughtContent = msg.content.substring(startOfThought + openTag.length);
     mainContent = ""; 
+  } else if (!msg.content.includes("<thinking>") && !msg.content.includes("</thinking>")) {
+    thoughtContent = null; mainContent = msg.content;
   }
 
-  // Artifact Cleanup
-  if (mainContent) {
-    mainContent = mainContent
-      .replace(/<mermaid>/g, '\n```mermaid\n')
-      .replace(/<\/mermaid>/g, '\n```\n')
-      .replace(/<search>/g, '\n> **Searching:** ')
-      .replace(/<\/search>/g, '\n')
-      .trim();
-  }
+  if (mainContent) { mainContent = mainContent.replace(/<mermaid>/g, '\n```mermaid\n').replace(/<\/mermaid>/g, '\n```\n').replace(/<search>/g, '\n> **Searching:** ').replace(/<\/search>/g, '\n').trim(); }
 
   return (
     <div className="flex gap-6 group animate-fade-in">
@@ -100,6 +81,19 @@ const MessageBubble = ({ msg, isStreaming }) => {
   );
 };
 
+const QuickActions = ({ onAction }) => {
+  const actions = [{ label: 'Explain', icon: BookOpen, cmd: '/explain' }, { label: 'Fix Bugs', icon: Bug, cmd: '/fix' }, { label: 'Unit Tests', icon: Code2, cmd: '/test' }, { label: 'Refactor', icon: Zap, cmd: '/refactor' }];
+  return (
+    <div className="flex gap-2 px-6 pb-2 overflow-x-auto custom-scrollbar">
+      {actions.map((action) => (
+        <button key={action.label} onClick={() => onAction(action.cmd)} className="flex items-center gap-2 px-3 py-1.5 bg-[#1a1a1a] border border-white/10 rounded-full text-[11px] text-gray-400 hover:text-white hover:border-indigo-500/50 hover:bg-indigo-500/10 transition-all whitespace-nowrap group">
+          <action.icon size={12} className="text-indigo-500 group-hover:text-indigo-400" /><span className="font-medium">{action.label}</span>
+        </button>
+      ))}
+    </div>
+  );
+};
+
 export const Workspace = () => {
   const { messages, sendMessage, isLoading, isOllamaRunning } = useLumina();
   const [input, setInput] = useState("");
@@ -109,13 +103,23 @@ export const Workspace = () => {
   useEffect(() => { bottomRef.current?.scrollIntoView({ behavior: 'smooth' }); }, [messages, isLoading]);
   useEffect(() => { if (textareaRef.current) { textareaRef.current.style.height = 'auto'; textareaRef.current.style.height = Math.min(textareaRef.current.scrollHeight, 200) + 'px'; } }, [input]);
 
-  const handleSend = () => { if (!input.trim()) return; sendMessage(input); setInput(""); };
+  const handleSend = () => { 
+    if (!input.trim()) return; 
+    let finalPrompt = input;
+    if (input.startsWith('/explain')) finalPrompt = "Analyze this code/context and explain it step-by-step.";
+    else if (input.startsWith('/fix')) finalPrompt = "Analyze this code for bugs and security issues. Provide a fixed version.";
+    else if (input.startsWith('/test')) finalPrompt = "Generate unit tests for this code.";
+    else if (input.startsWith('/refactor')) finalPrompt = "Refactor this code to be cleaner and more efficient.";
+    sendMessage(finalPrompt); setInput(""); 
+  };
+
+  const handleQuickAction = (cmd) => { setInput(cmd + " "); if (textareaRef.current) textareaRef.current.focus(); };
 
   if (!isOllamaRunning) return <div className="flex-1 flex flex-col items-center justify-center text-gray-500 bg-black bg-grid-pattern"><div className="p-4 rounded-full bg-white/5 mb-4 animate-glow"><Bot size={32} className="opacity-80 text-white" /></div><p className="font-mono text-xs tracking-widest uppercase">System Offline • Run Ollama</p></div>;
 
   return (
     <div className="flex-1 flex flex-col min-h-0 bg-[#030304] bg-grid-pattern relative">
-      <div className="flex-1 overflow-y-auto px-4 pb-40 custom-scrollbar scroll-smooth">
+      <div className="flex-1 overflow-y-auto px-4 pb-48 custom-scrollbar scroll-smooth">
         <div className="max-w-3xl mx-auto space-y-10 pt-10">
           {messages.length === 0 && (
             <div className="mt-20 text-center space-y-8 animate-slide-up">
@@ -132,12 +136,14 @@ export const Workspace = () => {
           <div ref={bottomRef} />
         </div>
       </div>
-      <div className="absolute bottom-0 left-0 right-0 p-6 bg-gradient-to-t from-[#030304] via-[#030304]/95 to-transparent pt-32 pointer-events-none">
-        <div className="max-w-3xl mx-auto pointer-events-auto">
+      <div className="absolute bottom-0 left-0 right-0 bg-gradient-to-t from-[#030304] via-[#030304] to-transparent pt-10 pb-6 pointer-events-none">
+        <div className="max-w-3xl mx-auto pointer-events-auto flex flex-col gap-2">
+           {!isLoading && messages.length > 0 && <QuickActions onAction={handleQuickAction} />}
            <div className="relative flex items-end gap-3 bg-[#0A0A0A]/90 backdrop-blur-xl border border-white/10 rounded-2xl p-3 shadow-2xl focus-within:border-indigo-500/50 focus-within:ring-1 focus-within:ring-indigo-500/20 transition-all">
-              <textarea ref={textareaRef} value={input} onChange={(e) => setInput(e.target.value)} onKeyDown={(e) => e.key === 'Enter' && !e.shiftKey && (e.preventDefault(), handleSend())} placeholder="Ask anything..." className="w-full bg-transparent border-none focus:ring-0 text-white placeholder-gray-500 text-sm resize-none max-h-48 min-h-[24px] py-3 px-2 custom-scrollbar" rows={1} />
+              <textarea ref={textareaRef} value={input} onChange={(e) => setInput(e.target.value)} onKeyDown={(e) => e.key === 'Enter' && !e.shiftKey && (e.preventDefault(), handleSend())} placeholder="Message Lumina... (Try /explain, /fix)" className="w-full bg-transparent border-none focus:ring-0 text-white placeholder-gray-500 text-sm resize-none max-h-48 min-h-[24px] py-3 px-2 custom-scrollbar font-medium" rows={1} />
               <button onClick={handleSend} disabled={isLoading || !input.trim()} className="mb-1 p-2.5 rounded-xl bg-white text-black hover:bg-indigo-50 disabled:opacity-50 disabled:bg-gray-700 disabled:text-gray-500 transition-all shadow-lg shadow-indigo-500/20">{isLoading ? <StopCircle size={18} /> : <ArrowUp size={18} />}</button>
            </div>
+           <div className="text-center flex items-center justify-center gap-2 opacity-50 hover:opacity-100 transition-opacity"><Terminal size={10} className="text-indigo-500"/><span className="text-[10px] text-gray-500 uppercase tracking-widest font-medium">Lumina Neural Engine v2.0</span></div>
         </div>
       </div>
     </div>

@@ -16,6 +16,8 @@ contextBridge.exposeInMainWorld('lumina', {
   getProjects: () => ipcRenderer.invoke('project:list'),
   createProject: (data) => ipcRenderer.invoke('project:create', data),
   addFilesToProject: (id) => ipcRenderer.invoke('project:add-files', id),
+  // NEW: Folder Support
+  addFolderToProject: (id) => ipcRenderer.invoke('project:add-folder', id),
   addUrlToProject: (id, url) => ipcRenderer.invoke('project:add-url', { projectId: id, url }),
   updateProjectSettings: (id, systemPrompt) => ipcRenderer.invoke('project:update-settings', { id, systemPrompt }),
   deleteProject: (id) => ipcRenderer.invoke('project:delete', id),

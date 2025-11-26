@@ -51,8 +51,12 @@ export const LuminaProvider = ({ children }) => {
 
   const createProject = async (name) => { const newProj = await window.lumina.createProject({ id: uuidv4(), name }); setProjects(prev => [...prev, newProj]); setActiveProject(newProj); };
   const updateProjectSettings = async (systemPrompt) => { if (!activeProject) return; const updatedProj = await window.lumina.updateProjectSettings(activeProject.id, systemPrompt); if (updatedProj) { setActiveProject(updatedProj); setProjects(prev => prev.map(p => p.id === activeProject.id ? updatedProj : p)); } };
+  
+  // File & Folder Actions
   const addFiles = async () => { if (!activeProject) return; const newFiles = await window.lumina.addFilesToProject(activeProject.id); if (newFiles) updateProjectFiles(newFiles); };
+  const addFolder = async () => { if (!activeProject) return; const newFiles = await window.lumina.addFolderToProject(activeProject.id); if (newFiles) updateProjectFiles(newFiles); };
   const addUrl = async (url) => { if (!activeProject) return; const newFiles = await window.lumina.addUrlToProject(activeProject.id, url); if (newFiles) updateProjectFiles(newFiles); };
+  
   const updateProjectFiles = (newFiles) => { setActiveProject(prev => ({ ...prev, files: newFiles })); setProjects(prev => prev.map(p => p.id === activeProject.id ? { ...p, files: newFiles } : p)); };
   const deleteProject = async (e, id) => { e.stopPropagation(); await window.lumina.deleteProject(id); setProjects(prev => prev.filter(p => p.id !== id)); if (activeProject?.id === id) setActiveProject(null); };
 
@@ -114,7 +118,7 @@ export const LuminaProvider = ({ children }) => {
       messages, sendMessage, isLoading, isOllamaRunning,
       currentModel, setCurrentModel, availableModels, settings, updateSettings,
       sessions, sessionId, startNewChat, loadSession, deleteSession, renameChat,
-      projects, activeProject, setActiveProject, createProject, updateProjectSettings, addFiles, addUrl, deleteProject
+      projects, activeProject, setActiveProject, createProject, updateProjectSettings, addFiles, addFolder, addUrl, deleteProject
     }}>
       {children}
     </LuminaContext.Provider>

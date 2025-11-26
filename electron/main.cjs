@@ -1,4 +1,3 @@
-// --- POLYFILLS ---
 if (typeof DOMMatrix === 'undefined') { global.DOMMatrix = class DOMMatrix {}; }
 if (typeof ImageData === 'undefined') { global.ImageData = class ImageData {}; }
 if (typeof Path2D === 'undefined') { global.Path2D = class Path2D {}; }
@@ -8,7 +7,6 @@ const path = require('path');
 const fs = require('fs');
 const { createTray } = require('./tray.cjs');
 
-// --- LAZY LOAD MODULES (Prevents Startup Crashes) ---
 const loadPdf = () => require('pdf-parse');
 const loadCheerio = () => require('cheerio');
 
@@ -27,7 +25,7 @@ const getSettingsPath = () => path.join(getUserDataPath(), 'settings.json');
 const DEFAULT_SETTINGS = {
   ollamaUrl: "http://127.0.0.1:11434",
   defaultModel: "llama3",
-  contextLength: 8192,
+  contextLength: 16384, // Boosted for Folder Context
   temperature: 0.7,
   systemPrompt: "" 
 };
@@ -65,6 +63,33 @@ function createWindow() {
   return mainWindow;
 }
 
+// --- RECURSIVE FOLDER SCANNER (The Power Feature) ---
+async function scanDirectory(dirPath, fileList = []) {
+  const files = await fs.promises.readdir(dirPath, { withFileTypes: true });
+  
+  for (const file of files) {
+    const fullPath = path.join(dirPath, file.name);
+    
+    // 1. IGNORE JUNK FOLDERS
+    if (file.isDirectory()) {
+      if (['node_modules', '.git', 'dist', 'build', 'coverage', '.next', '.cache', '__pycache__'].includes(file.name)) continue;
+      await scanDirectory(fullPath, fileList);
+    } else {
+      // 2. IGNORE JUNK FILES
+      if (['.DS_Store', 'package-lock.json', 'yarn.lock'].includes(file.name)) continue;
+      if (['.png', '.jpg', '.jpeg', '.gif', '.svg', '.ico', '.mp4', '.mov', '.mp3', '.exe', '.bin', '.zip', '.tar', '.gz', '.iso', '.dll'].includes(path.extname(file.name).toLowerCase())) continue;
+      
+      // 3. Add valid file
+      fileList.push({
+        path: fullPath,
+        name: file.name,
+        type: path.extname(file.name).substring(1)
+      });
+    }
+  }
+  return fileList;
+}
+
 async function readProjectFiles(projectFiles) {
   let context = "";
   for (const file of projectFiles) {
@@ -73,22 +98,22 @@ async function readProjectFiles(projectFiles) {
         const filePath = path.join(getCachePath(), file.cacheFile);
         if (fs.existsSync(filePath)) {
            const content = await fs.promises.readFile(filePath, 'utf-8');
-           context += `\n--- WEB: ${file.name} ---\n${content.slice(0, 15000)}\n--- END WEB ---\n`;
+           context += `\n--- WEB: ${file.name} ---\n${content.slice(0, 20000)}\n--- END WEB ---\n`;
         }
         continue;
       }
       const stats = await fs.promises.stat(file.path);
-      if (stats.size > 10 * 1024 * 1024) continue; 
+      if (stats.size > 10 * 1024 * 1024) continue; // Skip > 10MB
       
       if (file.path.toLowerCase().endsWith('.pdf')) {
         const pdf = loadPdf();
         const dataBuffer = await fs.promises.readFile(file.path);
         const data = await pdf(dataBuffer);
-        context += `\n--- PDF: ${file.name} ---\n${data.text.slice(0, 15000)}\n--- END PDF ---\n`;
+        context += `\n--- PDF: ${file.name} ---\n${data.text.slice(0, 20000)}\n--- END PDF ---\n`;
       } 
-      else if (!['png','jpg','exe','bin','zip','iso'].includes(file.type.toLowerCase())) {
+      else {
         const content = await fs.promises.readFile(file.path, 'utf-8');
-        if (content.indexOf('\0') === -1) context += `\n--- FILE: ${file.name} ---\n${content}\n--- END FILE ---\n`;
+        if (content.indexOf('\0') === -1) context += `\n--- FILE: ${file.name} (Path: ${file.path}) ---\n${content}\n--- END FILE ---\n`;
       }
     } catch (e) { console.error(`Read error: ${file.name}`); }
   }
@@ -99,7 +124,6 @@ app.whenReady().then(() => {
   const win = createWindow();
   createTray(win);
 
-  // --- SETTINGS ---
   ipcMain.handle('settings:load', async () => {
     try {
       if (fs.existsSync(getSettingsPath())) {
@@ -115,7 +139,6 @@ app.whenReady().then(() => {
     return true;
   });
 
-  // --- OLLAMA STREAM ---
   ipcMain.on('ollama:stream-prompt', async (event, { prompt, model, contextFiles, systemPrompt, settings }) => {
     if (!win) return;
     try {
@@ -123,7 +146,6 @@ app.whenReady().then(() => {
       const baseUrl = config.ollamaUrl || "http://127.0.0.1:11434";
       
       let finalPrompt = "";
-      
       const baseSystem = `
       You are Lumina 2.0.
       PROTOCOL:
@@ -131,15 +153,16 @@ app.whenReady().then(() => {
       2. SECOND, provide the final answer after the closing tag.
       3. NEVER put thoughts inside code blocks.
       4. Use <mermaid>...</mermaid> for diagrams.
+      5. You have access to the user's full project files. Reference them by name.
       `;
 
       const userSystem = systemPrompt || config.systemPrompt || "";
       finalPrompt += `SYSTEM: ${baseSystem}\n${userSystem}\n\n`;
 
       if (contextFiles && contextFiles.length > 0) {
-        win.webContents.send('ollama:chunk', '<thinking>Reading project files...</thinking>'); 
+        win.webContents.send('ollama:chunk', '<thinking>Reading project files & analyzing structure...</thinking>'); 
         const fileContext = await readProjectFiles(contextFiles);
-        finalPrompt += `CONTEXT FILES:\n${fileContext.slice(0, 80000)}\n\n`;
+        finalPrompt += `CONTEXT FILES:\n${fileContext.slice(0, 200000)}\n\n`; // Massive Context
       }
 
       finalPrompt += `USER QUERY: ${prompt}`;
@@ -151,7 +174,7 @@ app.whenReady().then(() => {
           model: model || config.defaultModel, 
           prompt: finalPrompt, 
           stream: true,
-          options: { num_ctx: parseInt(config.contextLength) || 8192, temperature: parseFloat(config.temperature) || 0.7 }
+          options: { num_ctx: parseInt(config.contextLength) || 16384, temperature: parseFloat(config.temperature) || 0.7 }
         })
       });
       
@@ -185,7 +208,6 @@ app.whenReady().then(() => {
     } catch(e) { return []; }
   });
 
-  // --- PROJECT & FILES ---
   ipcMain.handle('project:add-url', async (e, { projectId, url }) => {
     try {
       const cheerio = loadCheerio();
@@ -210,7 +232,7 @@ app.whenReady().then(() => {
     return false;
   });
 
-  // CRUD
+  // --- PROJECT HANDLERS ---
   ipcMain.handle('project:update-settings', async (e, { id, systemPrompt }) => {
     const p = path.join(getProjectsPath(), `${id}.json`);
     if (fs.existsSync(p)) { const d = JSON.parse(await fs.promises.readFile(p, 'utf-8')); d.systemPrompt = systemPrompt; await fs.promises.writeFile(p, JSON.stringify(d, null, 2)); return d; } return null;
@@ -221,9 +243,34 @@ app.whenReady().then(() => {
   ipcMain.handle('project:create', async (e, { id, name }) => {
     const p = path.join(getProjectsPath(), `${id}.json`); const n = { id, name, files: [], systemPrompt: "", createdAt: new Date() }; await fs.promises.writeFile(p, JSON.stringify(n, null, 2)); return n;
   });
+  
+  // ADD FILES (Legacy)
   ipcMain.handle('project:add-files', async (e, projectId) => {
     const r = await dialog.showOpenDialog(win, { properties: ['openFile', 'multiSelections'] }); if (!r.canceled) { const p = path.join(getProjectsPath(), `${projectId}.json`); const d = JSON.parse(await fs.promises.readFile(p, 'utf-8')); const n = r.filePaths.map(x => ({ path: x, name: path.basename(x), type: path.extname(x).substring(1) })); d.files.push(...n.filter(f => !d.files.some(ex => ex.path === f.path))); await fs.promises.writeFile(p, JSON.stringify(d, null, 2)); return d.files; } return null;
   });
+
+  // --- NEW: ADD FOLDER HANDLER ---
+  ipcMain.handle('project:add-folder', async (e, projectId) => {
+    const r = await dialog.showOpenDialog(win, { properties: ['openDirectory'] }); 
+    if (!r.canceled && r.filePaths.length > 0) { 
+      const folderPath = r.filePaths[0];
+      // Recursively scan
+      const allFiles = await scanDirectory(folderPath);
+      
+      // Add to project
+      const p = path.join(getProjectsPath(), `${projectId}.json`);
+      const d = JSON.parse(await fs.promises.readFile(p, 'utf-8'));
+      
+      // Merge unique files
+      const newFiles = allFiles.filter(f => !d.files.some(existing => existing.path === f.path));
+      d.files.push(...newFiles);
+      
+      await fs.promises.writeFile(p, JSON.stringify(d, null, 2)); 
+      return d.files; 
+    } 
+    return null;
+  });
+
   ipcMain.handle('project:delete', async (e, id) => { await fs.promises.unlink(path.join(getProjectsPath(), `${id}.json`)); return true; });
   ipcMain.handle('session:save', async (e, { id, title, messages, date }) => {
     const p = path.join(getSessionsPath(), `${id}.json`); let t = title; if(fs.existsSync(p)){ const ex = JSON.parse(await fs.promises.readFile(p,'utf-8')); if(ex.title && ex.title!=="New Chat" && (!title||title==="New Chat")) t = ex.title; } await fs.promises.writeFile(p, JSON.stringify({ id, title:t||"New Chat", messages, date }, null, 2)); return true;

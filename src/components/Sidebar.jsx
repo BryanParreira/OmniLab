@@ -22,7 +22,6 @@ export const Sidebar = () => {
   const handleCreateProject = () => { if(!newProjName.trim()) return; createProject(newProjName); setNewProjName(""); setIsCreatingProj(false); };
   const openSettings = (e, project) => { e.stopPropagation(); setEditingProject(project); setTempSystemPrompt(project.systemPrompt || ""); };
   const saveSettings = async () => { await updateProjectSettings(tempSystemPrompt); setEditingProject(null); };
-  
   const startRenaming = (e, session) => { e.stopPropagation(); setEditingSessionId(session.id); setRenameValue(session.title || ""); };
   const submitRename = async (e) => { e.stopPropagation(); if (renameValue.trim()) await renameChat(editingSessionId, renameValue); setEditingSessionId(null); };
 
