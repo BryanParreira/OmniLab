@@ -1,19 +1,27 @@
 const { contextBridge, ipcRenderer } = require('electron');
 
 contextBridge.exposeInMainWorld('lumina', {
-  // System
-  resetSystem: () => ipcRenderer.invoke('system:factory-reset'),
-  loadSettings: () => ipcRenderer.invoke('settings:load'),
-  saveSettings: (settings) => ipcRenderer.invoke('settings:save', settings),
-  
-  // AI
+  // AI Core
   checkOllamaStatus: (url) => ipcRenderer.invoke('ollama:status', url),
   getModels: (url) => ipcRenderer.invoke('ollama:models', url),
-  sendPrompt: (prompt, model, contextFiles, systemPrompt, settings) => ipcRenderer.send('ollama:stream-prompt', { prompt, model, contextFiles, systemPrompt, settings }),
-  onResponseChunk: (cb) => { const sub = (_e, data) => cb(data); ipcRenderer.on('ollama:chunk', sub); return () => ipcRenderer.removeListener('ollama:chunk', sub); },
+  sendPrompt: (prompt, model, contextFiles, systemPrompt, settings, projectId) => 
+    ipcRenderer.send('ollama:stream-prompt', { prompt, model, contextFiles, systemPrompt, settings, projectId }),
+  generateJson: (prompt, model, settings) => ipcRenderer.invoke('ollama:generate-json', { prompt, model, settings }),
   
-  // Files & Projects
+  // Listeners
+  onResponseChunk: (cb) => {
+    const sub = (_e, data) => cb(data);
+    ipcRenderer.on('ollama:chunk', sub);
+    return () => ipcRenderer.removeListener('ollama:chunk', sub);
+  },
+  
+  // System
+  loadSettings: () => ipcRenderer.invoke('settings:load'),
+  saveSettings: (settings) => ipcRenderer.invoke('settings:save', settings),
   saveGeneratedFile: (content, filename) => ipcRenderer.invoke('system:save-file', { content, filename }),
+  resetSystem: () => ipcRenderer.invoke('system:factory-reset'),
+
+  // Projects & Files
   getProjects: () => ipcRenderer.invoke('project:list'),
   createProject: (data) => ipcRenderer.invoke('project:create', data),
   addFilesToProject: (id) => ipcRenderer.invoke('project:add-files', id),
@@ -22,16 +30,18 @@ contextBridge.exposeInMainWorld('lumina', {
   updateProjectSettings: (id, systemPrompt) => ipcRenderer.invoke('project:update-settings', { id, systemPrompt }),
   deleteProject: (id) => ipcRenderer.invoke('project:delete', id),
   
-  // Sessions
+  // Advanced Features
+  generateGraph: (id) => ipcRenderer.invoke('project:generate-graph', id),
+  runDeepResearch: (id, url) => ipcRenderer.invoke('agent:deep-research', { projectId: id, url }),
+  getGitStatus: (id) => ipcRenderer.invoke('git:status', id),
+  getGitDiff: (id) => ipcRenderer.invoke('git:diff', id),
+
+  // Sessions & Calendar
   saveSession: (data) => ipcRenderer.invoke('session:save', data),
   getSessions: () => ipcRenderer.invoke('session:list'),
   loadSession: (id) => ipcRenderer.invoke('session:load', id),
   deleteSession: (id) => ipcRenderer.invoke('session:delete', id),
   renameSession: (id, title) => ipcRenderer.invoke('session:rename', { id, title }),
-  
-  // Advanced
-  generateGraph: (id) => ipcRenderer.invoke('project:generate-graph', id),
-  runDeepResearch: (id, url) => ipcRenderer.invoke('agent:deep-research', { projectId: id, url }),
-  getGitStatus: (id) => ipcRenderer.invoke('git:status', id),
-  getGitDiff: (id) => ipcRenderer.invoke('git:diff', id),
+  loadCalendar: () => ipcRenderer.invoke('calendar:load'),
+  saveCalendar: (events) => ipcRenderer.invoke('calendar:save', events),
 });

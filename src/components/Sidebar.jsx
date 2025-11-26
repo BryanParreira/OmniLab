@@ -1,6 +1,6 @@
 import React, { useState } from 'react';
 import { useLumina } from '../context/LuminaContext';
-import { Plus, MessageSquare, Trash2, Box, Folder, Settings as SettingsIcon, Sliders, Edit2, Check } from 'lucide-react';
+import { Plus, MessageSquare, Trash2, Box, Folder, Settings as SettingsIcon, Sliders, Edit2, Check, Calendar } from 'lucide-react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { Settings } from './Settings';
 
@@ -25,19 +25,10 @@ export const Sidebar = () => {
   const startRenaming = (e, session) => { e.stopPropagation(); setEditingSessionId(session.id); setRenameValue(session.title || ""); };
   const submitRename = async (e) => { e.stopPropagation(); if (renameValue.trim()) await renameChat(editingSessionId, renameValue); setEditingSessionId(null); };
 
-  const handleProjectClick = (proj) => {
-    setActiveProject(proj);
-    // LOGIC: Only open dashboard if Dev Mode is ON. Otherwise just set context.
-    if (settings.developerMode) {
-      setCurrentView('project-dashboard');
-    } else {
-      setCurrentView('chat');
-    }
-  };
-
+  const handleProjectClick = (proj) => { setActiveProject(proj); if (settings.developerMode) setCurrentView('project-dashboard'); else setCurrentView('chat'); };
   const handleChatClick = (id) => { loadSession(id); setCurrentView('chat'); };
   const handleNewChat = () => { startNewChat(); setCurrentView('chat'); };
-  const switchTab = (tab) => { setActiveTab(tab); if (tab === 'projects' && settings.developerMode) setCurrentView('project-dashboard'); if (tab === 'chats') setCurrentView('chat'); };
+  const switchTab = (tab) => { setActiveTab(tab); if (tab === 'calendar') setCurrentView('chronos'); else if (tab === 'projects' && settings.developerMode) setCurrentView('project-dashboard'); else if (tab === 'chats') setCurrentView('chat'); };
 
   return (
     <div className="flex flex-col h-full rounded-2xl glass-panel overflow-hidden transition-colors duration-500">
@@ -49,6 +40,7 @@ export const Sidebar = () => {
         <div className="flex p-1 bg-black/40 rounded-lg border border-white/5 mb-4">
           <button onClick={() => switchTab('chats')} className={`flex-1 py-1.5 text-[10px] font-medium rounded-md transition-all ${activeTab === 'chats' ? 'bg-[#1a1a1a] text-white shadow-sm border border-white/10' : 'text-gray-500 hover:text-gray-300'}`}>Chats</button>
           <button onClick={() => switchTab('projects')} className={`flex-1 py-1.5 text-[10px] font-medium rounded-md transition-all ${activeTab === 'projects' ? 'bg-[#1a1a1a] text-white shadow-sm border border-white/10' : 'text-gray-500 hover:text-gray-300'}`}>Projects</button>
+          <button onClick={() => switchTab('calendar')} className={`flex-1 py-1.5 text-[10px] font-medium rounded-md transition-all ${activeTab === 'calendar' ? 'bg-[#1a1a1a] text-white shadow-sm border border-white/10' : 'text-gray-500 hover:text-gray-300'}`}><Calendar size={12} className="mx-auto"/></button>
         </div>
       </div>
 
@@ -70,7 +62,7 @@ export const Sidebar = () => {
             {!isCreatingProj ? (
               <button onClick={() => setIsCreatingProj(true)} className="flex w-full items-center justify-center gap-2 rounded-lg border border-dashed border-white/10 text-gray-500 px-3 py-2 text-[10px] hover:border-white/20 hover:text-white transition-all mb-3"><Plus size={12} /> Create Context</button>
             ) : (
-              <div className="mb-3 p-2 bg-[#111] rounded-lg border border-white/10 animate-fade-in"><input autoFocus value={newProjName} onChange={(e) => setNewProjName(e.target.value)} onKeyDown={(e) => e.key === 'Enter' && handleCreateProject()} placeholder="Project Name..." className="w-full bg-transparent text-white text-[11px] outline-none mb-2" /><div className="flex gap-2 justify-end"><button onClick={() => setIsCreatingProj(false)} className="text-[9px] text-gray-500 hover:text-white">Cancel</button><button onClick={handleCreateProject} className={`text-[9px] px-2 py-0.5 rounded text-white ${theme.primaryBg}`}>Create</button></div></div>
+              <div className="mb-3 p-2 bg-[#111] rounded-lg border border-white/10 animate-fade-in"><input autoFocus value={newProjName} onChange={(e) => setNewProjName(e.target.value)} onKeyDown={(e) => e.key === 'Enter' && handleCreateProject()} placeholder="Name..." className="w-full bg-transparent text-white text-[11px] outline-none mb-2" /><div className="flex gap-2 justify-end"><button onClick={() => setIsCreatingProj(false)} className="text-[9px] text-gray-500 hover:text-white">Cancel</button><button onClick={handleCreateProject} className={`text-[9px] px-2 py-0.5 rounded text-white ${theme.primaryBg}`}>Create</button></div></div>
             )}
             <div className="space-y-2">
               {projects.map(proj => (
@@ -83,7 +75,9 @@ export const Sidebar = () => {
           </>
         )}
       </div>
+
       <div className="p-3 border-t border-white/5 bg-black/20"><button onClick={openGlobalSettings} className="flex w-full items-center gap-2 text-gray-400 hover:text-white transition-colors text-[11px] font-medium px-2 py-1.5 rounded-lg hover:bg-white/5 group"><SettingsIcon size={12} className="group-hover:rotate-90 transition-transform duration-500"/> Settings</button></div>
+      <AnimatePresence>{editingProject && (<motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} className="absolute inset-0 bg-black/90 backdrop-blur-sm z-50 flex items-center justify-center p-4"><div className="bg-[#0F0F0F] border border-white/10 rounded-xl w-full p-4 shadow-2xl"><div className="flex justify-between items-center mb-4"><h3 className="text-white text-xs font-bold uppercase tracking-wider flex items-center gap-2"><Sliders size={12} className={theme.accentText}/> Persona</h3><button onClick={() => setEditingProject(null)} className="text-gray-500 hover:text-white"><X size={14} /></button></div><textarea value={tempSystemPrompt} onChange={(e) => setTempSystemPrompt(e.target.value)} className={`w-full h-40 bg-black border border-white/10 rounded-lg p-3 text-xs text-white resize-none mb-4 focus:border-opacity-100 outline-none ${theme.primaryBorder}`} placeholder="System instructions..." /><button onClick={saveSettings} className={`w-full text-white rounded-lg py-2 text-xs font-bold ${theme.primaryBg}`}>Save</button></div></motion.div>)}</AnimatePresence>
     </div>
   );
 };
