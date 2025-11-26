@@ -16,7 +16,6 @@ contextBridge.exposeInMainWorld('lumina', {
   getProjects: () => ipcRenderer.invoke('project:list'),
   createProject: (data) => ipcRenderer.invoke('project:create', data),
   addFilesToProject: (id) => ipcRenderer.invoke('project:add-files', id),
-  // NEW: Folder Support
   addFolderToProject: (id) => ipcRenderer.invoke('project:add-folder', id),
   addUrlToProject: (id, url) => ipcRenderer.invoke('project:add-url', { projectId: id, url }),
   updateProjectSettings: (id, systemPrompt) => ipcRenderer.invoke('project:update-settings', { id, systemPrompt }),
@@ -26,4 +25,8 @@ contextBridge.exposeInMainWorld('lumina', {
   loadSession: (id) => ipcRenderer.invoke('session:load', id),
   deleteSession: (id) => ipcRenderer.invoke('session:delete', id),
   renameSession: (id, title) => ipcRenderer.invoke('session:rename', { id, title }),
+  generateGraph: (id) => ipcRenderer.invoke('project:generate-graph', id),
+  runDeepResearch: (id, url) => ipcRenderer.invoke('agent:deep-research', { projectId: id, url }),
+  getGitStatus: (id) => ipcRenderer.invoke('git:status', id),
+  getGitDiff: (id) => ipcRenderer.invoke('git:diff', id),
 });
