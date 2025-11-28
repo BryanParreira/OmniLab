@@ -1,7 +1,14 @@
 import React, { useState, useEffect, useCallback, useMemo } from 'react';
 import { useLumina } from '../context/LuminaContext';
-import { X, Save, Server, Cpu, Brain, Sliders, Monitor, Type, Database, Terminal, BookOpen, Shield, Zap, Check, ChevronDown, RefreshCw, AlertCircle, Sparkles } from 'lucide-react';
+import { 
+  X, Save, Server, Cpu, Brain, Sliders, Monitor, Type, Database, 
+  Terminal, BookOpen, Shield, Zap, Check, ChevronDown, RefreshCw, 
+  AlertCircle, Sparkles, Info, Github, Bug, FileText, ExternalLink 
+} from 'lucide-react';
 import { motion, AnimatePresence } from 'framer-motion';
+
+// --- CONFIGURATION ---
+const REPO_URL = "https://github.com/BryanParreira/OmniLab";
 
 const getTheme = (isDev) => ({
   accent: isDev ? 'text-rose-400' : 'text-indigo-400',
@@ -129,6 +136,11 @@ export const Settings = ({ isOpen, onClose }) => {
     }
   }, [factoryReset, onClose]);
 
+  // Helper to open external links
+  const openLink = (url) => {
+    window.open(url, '_blank');
+  };
+
   if (!isOpen) return null;
 
   return (
@@ -138,6 +150,7 @@ export const Settings = ({ isOpen, onClose }) => {
         <div className={`absolute top-0 left-0 w-full h-1 bg-gradient-to-r ${localTheme.gradient} opacity-60`}></div>
         <div className={`absolute top-0 right-0 w-96 h-96 bg-gradient-to-br ${localTheme.gradient} opacity-5 blur-3xl pointer-events-none`}></div>
 
+        {/* Header */}
         <div className="flex items-center justify-between px-8 py-6 border-b border-white/5 bg-[#050505]/80 backdrop-blur-sm relative z-10">
           <div className="flex items-center gap-3">
             <div className={`p-2.5 rounded-xl bg-gradient-to-br ${localTheme.gradient} shadow-lg ${localTheme.glow}`}><Sliders size={18} className="text-white" /></div>
@@ -158,16 +171,22 @@ export const Settings = ({ isOpen, onClose }) => {
         </div>
 
         <div className="flex flex-1 overflow-hidden relative z-10">
+          {/* Sidebar */}
           <div className="w-64 border-r border-white/5 bg-[#020202]/50 backdrop-blur-sm p-4 flex flex-col gap-2">
             <NavButton active={activeTab === 'capabilities'} onClick={() => setActiveTab('capabilities')} icon={Terminal} label="Capabilities" desc="Modes & Personas" theme={localTheme} />
             <NavButton active={activeTab === 'neural'} onClick={() => setActiveTab('neural')} icon={Brain} label="Neural Engine" desc="LLM & Connection" theme={localTheme} />
             <NavButton active={activeTab === 'interface'} onClick={() => setActiveTab('interface')} icon={Monitor} label="Interface" desc="Visuals & Layout" theme={localTheme} />
             <NavButton active={activeTab === 'data'} onClick={() => setActiveTab('data')} icon={Database} label="Data Management" desc="Storage & Reset" theme={localTheme} />
+            <div className="flex-1"></div>
+            {/* New About Button */}
+            <NavButton active={activeTab === 'about'} onClick={() => setActiveTab('about')} icon={Info} label="About OmniLab" desc="Docs & Support" theme={localTheme} />
           </div>
 
           <div className="flex-1 p-10 overflow-y-auto custom-scrollbar bg-[#050505]/50 backdrop-blur-sm">
             <AnimatePresence mode="wait">
               <motion.div key={activeTab} initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, y: -20 }} transition={{ duration: 0.2 }} className="max-w-2xl">
+                
+                {/* --- CAPABILITIES TAB --- */}
                 {activeTab === 'capabilities' && (
                   <div className="space-y-8">
                     <div>
@@ -180,6 +199,8 @@ export const Settings = ({ isOpen, onClose }) => {
                     </div>
                   </div>
                 )}
+
+                {/* --- NEURAL TAB --- */}
                 {activeTab === 'neural' && (
                   <div className="space-y-8">
                     <Section title="Ollama Connection" icon={Server} theme={localTheme}>
@@ -209,6 +230,8 @@ export const Settings = ({ isOpen, onClose }) => {
                     </Section>
                   </div>
                 )}
+
+                {/* --- INTERFACE TAB --- */}
                 {activeTab === 'interface' && (
                   <div className="space-y-8">
                     <Section title="Appearance" icon={Type} theme={localTheme}>
@@ -222,6 +245,8 @@ export const Settings = ({ isOpen, onClose }) => {
                     </Section>
                   </div>
                 )}
+
+                {/* --- DATA TAB --- */}
                 {activeTab === 'data' && (
                   <div className="space-y-8">
                     <Section title="Danger Zone" icon={Shield} theme={localTheme}>
@@ -233,6 +258,45 @@ export const Settings = ({ isOpen, onClose }) => {
                     </Section>
                   </div>
                 )}
+
+                {/* --- ABOUT TAB --- */}
+                {activeTab === 'about' && (
+                  <div className="space-y-8">
+                    <div className="flex flex-col items-center justify-center p-8 text-center bg-white/5 rounded-2xl border border-white/5 mb-8">
+                       <div className={`p-4 rounded-2xl bg-gradient-to-br ${localTheme.gradient} shadow-2xl mb-4`}>
+                          <Brain size={40} className="text-white" />
+                       </div>
+                       <h3 className="text-2xl font-bold text-white tracking-tight">OmniLab</h3>
+                       <p className="text-sm text-gray-500 font-mono mt-1">v2.1.0 • {form.developerMode ? 'Forge' : 'Nexus'} Build</p>
+                    </div>
+
+                    <Section title="Community & Support" icon={Github} theme={localTheme}>
+                       <div className="grid grid-cols-2 gap-4">
+                          <button onClick={() => openLink(`${REPO_URL}#readme`)} className="flex items-center gap-3 p-4 rounded-xl bg-[#0A0A0A] border border-white/10 hover:bg-white/5 transition-all text-left group">
+                             <div className="p-2 bg-blue-500/10 rounded-lg text-blue-400"><FileText size={20}/></div>
+                             <div>
+                                <div className="text-sm font-bold text-white group-hover:text-blue-400 transition-colors flex items-center gap-2">Documentation <ExternalLink size={10} /></div>
+                                <div className="text-[10px] text-gray-500">Read the manual</div>
+                             </div>
+                          </button>
+
+                          <button onClick={() => openLink(`${REPO_URL}/issues`)} className="flex items-center gap-3 p-4 rounded-xl bg-[#0A0A0A] border border-white/10 hover:bg-white/5 transition-all text-left group">
+                             <div className="p-2 bg-orange-500/10 rounded-lg text-orange-400"><Bug size={20}/></div>
+                             <div>
+                                <div className="text-sm font-bold text-white group-hover:text-orange-400 transition-colors flex items-center gap-2">Report Issue <ExternalLink size={10} /></div>
+                                <div className="text-[10px] text-gray-500">Found a bug?</div>
+                             </div>
+                          </button>
+                       </div>
+                    </Section>
+
+                    <div className="text-center pt-8 border-t border-white/5">
+                        <p className="text-xs text-gray-600">Designed & Engineered by <span className={`${localTheme.accent} font-bold`}>Bryan Bernardo Parreira</span></p>
+                        <p className="text-[10px] text-gray-700 mt-1">Powered by Ollama • Local & Private</p>
+                    </div>
+                  </div>
+                )}
+
               </motion.div>
             </AnimatePresence>
           </div>
