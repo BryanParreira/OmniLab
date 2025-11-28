@@ -1,9 +1,9 @@
-import { defineConfig } from 'vite'
-import react from '@vitejs/plugin-react'
+import { defineConfig } from 'vite';
+import react from '@vitejs/plugin-react';
 
 export default defineConfig({
   plugins: [react()],
-  base: './',
+  base: './', // CRITICAL: Ensures assets load in Electron
   server: {
     port: 5173,
     strictPort: true,
@@ -12,4 +12,4 @@ export default defineConfig({
     outDir: 'dist',
     emptyOutDir: true,
   }
-})
+});

@@ -10,7 +10,9 @@ package-lock.json
 npm-cache/
 .pnpm-store/
 
-# ENV
+# =========================
+# Environment Variables
+# =========================
 .env
 .env.local
 .env.*.local
@@ -19,6 +21,7 @@ npm-cache/
 # Build Outputs
 # =========================
 dist/
+dist_electron/
 build/
 out/
 release/
@@ -33,19 +36,22 @@ coverage/
 *.dmg
 *.deb
 *.rpm
+*.AppImage
 
 # Electron intermediate build outputs
 /.webpack
 /.vite
 /.parcel
 
-# Next.js (if you use it)
-.next/
-out/
-
-# Vite
-vite.config.ts.timestamp-*
-*.tsbuildinfo
+# =========================
+# OmniLab Local Data (DO NOT COMMIT)
+# =========================
+userData/
+sessions/
+projects/
+cache/
+settings.json
+calendar.json
 
 # =========================
 # OS / Editor Files

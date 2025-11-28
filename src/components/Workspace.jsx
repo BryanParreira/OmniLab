@@ -1,38 +1,28 @@
-import React, { useEffect, useRef, useState, useMemo, useCallback } from 'react';
+import React, { useState, useEffect, useRef, useCallback, useMemo } from 'react';
 import { useLumina } from '../context/LuminaContext';
 import Markdown from 'react-markdown';
 import remarkGfm from 'remark-gfm'; 
 import { Prism as SyntaxHighlighter } from 'react-syntax-highlighter';
 import { vscDarkPlus } from 'react-syntax-highlighter/dist/esm/styles/prism';
-import { ArrowUp, Bot, User, StopCircle, Download, Check, Info, Code2, Eye, Sparkles, Layout, Globe, Bug, Zap, BookOpen, Terminal, GraduationCap, BrainCircuit, FileText, ShieldAlert, PenTool, Copy, Wifi, WifiOff } from 'lucide-react';
-import mermaid from 'mermaid'; 
+// UPDATED: Imported Brain icon, removed logo import and Bot icon
+import { ArrowUp, User, StopCircle, Download, Check, Info, Code2, Eye, Sparkles, Wifi, WifiOff, FlaskConical, PenTool, BrainCircuit, GraduationCap, ShieldAlert, Zap, BookOpen, Layers, GitBranch, Brain } from 'lucide-react';
 import clsx from 'clsx'; 
+import { LabBench } from './LabBench';
 
-mermaid.initialize({ startOnLoad: false, theme: 'dark', securityLevel: 'loose', fontFamily: 'Inter' });
-
-// Command registry for cleaner command parsing
 const COMMAND_REGISTRY = {
-  '/explain_simple': "Explain the current context/code to me as if I am a beginner student. Use analogies, simple language, and bullet points.",
-  '/quiz': "Create a short, interactive quiz based on the uploaded files. Ask me 3 multiple-choice questions.",
-  '/study': "Create a comprehensive study guide for the uploaded materials.",
-  '/outline': "Create a detailed essay outline based on the uploaded materials.",
-  '/review': "Perform a Senior Code Review on this file. Look for logic errors, performance bottlenecks, and style inconsistencies.",
-  '/audit': "Perform a Security Audit on this code. Look for XSS, SQL Injection, and sensitive data exposure.",
-  '/test': "Generate a complete Unit Test suite for this code.",
-  '/refactor': "Refactor this code to be cleaner, DRY, and more efficient."
+  '/explain_simple': "Explain this simply for a beginner.",
+  '/quiz': "Create a short, interactive quiz.",
+  '/study': "Create a comprehensive study guide.",
+  '/outline': "Create a detailed essay outline.",
+  '/review': "Perform a Senior Code Review.",
+  '/audit': "Perform a Security Audit.",
+  '/test': "Generate a Unit Test suite.",
+  '/refactor': "Refactor this code to be cleaner."
 };
 
-const LivePreview = ({ code }) => (
-  <div className="w-full h-96 bg-white rounded-b-xl overflow-hidden border-t border-white/10 relative group">
-    <div className="absolute top-3 right-3 bg-black/80 text-white text-[10px] px-2 py-1 rounded-md backdrop-blur opacity-0 group-hover:opacity-100 transition-opacity pointer-events-none z-10 font-medium">Live Preview</div>
-    <iframe srcDoc={code} className="w-full h-full border-none" sandbox="allow-scripts allow-modals" title="Live Preview" />
-  </div>
-);
-
 const CodeBlock = ({ language, children }) => {
+  const { openLabBench, theme } = useLumina();
   const [isSaved, setIsSaved] = useState(false);
-  const [mode, setMode] = useState('code'); 
-  const canPreview = language === 'html' || language === 'svg';
   
   const handleSave = useCallback(async () => { 
     if (window.lumina) { 
@@ -45,68 +35,23 @@ const CodeBlock = ({ language, children }) => {
     } 
   }, [children, language]);
 
-  if (language === 'mermaid') {
-    const ref = useRef(null); 
-    const [svg, setSvg] = useState('');
-    const id = useMemo(() => `mermaid-${Math.random().toString(36).substr(2, 9)}`, []);
-    
-    useEffect(() => { 
-      if (children && ref.current) { 
-        try { 
-          mermaid.render(id, children).then(({ svg }) => setSvg(svg)).catch(e => console.error(e)); 
-        } catch(e) {} 
-      } 
-    }, [children, id]);
-    
-    return <div ref={ref} className="my-6 p-6 bg-[#050505] border border-white/5 rounded-2xl flex justify-center overflow-x-auto shadow-inner" dangerouslySetInnerHTML={{ __html: svg }} />;
-  }
-
   return (
-    <div className="rounded-2xl overflow-hidden border border-white/10 my-6 bg-[#080808] shadow-2xl ring-1 ring-white/5">
-      <div className="bg-[#111] px-4 py-2.5 text-[10px] text-gray-400 font-mono border-b border-white/5 flex justify-between items-center">
-        <div className="flex items-center gap-3">
-          <span className="uppercase tracking-wider font-bold text-gray-500">{language}</span>
-          {canPreview && (
-            <div className="flex bg-black/50 rounded-lg p-0.5 border border-white/5">
-              <button 
-                onClick={() => setMode('code')} 
-                className={clsx("p-1.5 rounded-md transition-all", mode === 'code' ? 'bg-white/10 text-white' : 'hover:text-white')} 
-                title="Code"
-                aria-label="Show code"
-              >
-                <Code2 size={12} />
-              </button>
-              <button 
-                onClick={() => setMode('preview')} 
-                className={clsx("p-1.5 rounded-md transition-all", mode === 'preview' ? 'bg-indigo-500/20 text-indigo-300' : 'hover:text-white')} 
-                title="Preview"
-                aria-label="Show preview"
-              >
-                <Eye size={12} />
-              </button>
-            </div>
-          )}
+    <div className="rounded-2xl overflow-hidden border border-white/10 my-6 bg-[#080808] shadow-2xl ring-1 ring-white/5 group">
+      <div className="bg-[#111] px-4 py-2 text-[10px] text-gray-400 font-mono border-b border-white/5 flex justify-between items-center">
+        <span className="uppercase tracking-wider font-bold text-gray-500">{language}</span>
+        <div className="flex gap-2 opacity-0 group-hover:opacity-100 transition-opacity">
+          <button 
+            onClick={() => openLabBench(String(children).replace(/\n$/, ''), language)}
+            className={`flex items-center gap-1.5 ${theme.accentText} hover:bg-white/5 px-2 py-1 rounded transition-colors`}
+          >
+            <FlaskConical size={12} /> Open in Lab
+          </button>
+          <button onClick={handleSave} className="flex items-center gap-1.5 hover:text-white transition-colors hover:bg-white/5 px-2 py-1 rounded">
+            {isSaved ? <Check size={12} className="text-emerald-500" /> : <Download size={12} />} 
+          </button>
         </div>
-        <button 
-          onClick={handleSave} 
-          className="flex items-center gap-1.5 hover:text-white transition-colors bg-white/5 px-3 py-1 rounded-lg hover:bg-white/10 font-medium"
-          aria-label={isSaved ? "Code saved" : "Save code"}
-        >
-          {isSaved ? <Check size={12} className="text-emerald-500" /> : <Download size={12} />} 
-          {isSaved ? "Saved" : "Save"}
-        </button>
       </div>
-      {mode === 'code' ? (
-        <SyntaxHighlighter 
-          children={String(children).replace(/\n$/, '')} 
-          style={vscDarkPlus} 
-          language={language} 
-          PreTag="div" 
-          customStyle={{ margin: 0, background: 'transparent', fontSize: '13px', padding: '1.5rem', lineHeight: '1.6' }} 
-        />
-      ) : (
-        <LivePreview code={children} />
-      )}
+      <SyntaxHighlighter children={String(children).replace(/\n$/, '')} style={vscDarkPlus} language={language} PreTag="div" customStyle={{ margin: 0, background: 'transparent', fontSize: '13px', padding: '1.5rem', lineHeight: '1.6' }} />
     </div>
   );
 };
@@ -118,13 +63,10 @@ const Callout = ({ children, theme }) => (
   </div>
 );
 
-// Memoized message bubble to prevent unnecessary re-renders
 const MessageBubble = React.memo(({ msg, theme, fontSize, isStreaming }) => {
-  // Clean content once and memoize
   const mainContent = useMemo(() => {
     let content = msg.content.replace(/<thinking>[\s\S]*?<\/thinking>/gi, '').trim();
     content = content.replace(/<thinking>[\s\S]*$/gi, '');
-    content = content.replace(/<mermaid>/g, '\n```mermaid\n').replace(/<\/mermaid>/g, '\n```\n');
     return content;
   }, [msg.content]);
   
@@ -133,70 +75,58 @@ const MessageBubble = React.memo(({ msg, theme, fontSize, isStreaming }) => {
 
   return (
     <div className={clsx("flex gap-6 group animate-fade-in mb-8", isUser ? "flex-row-reverse" : "")}>
-      <div 
-        className={clsx("w-9 h-9 shrink-0 rounded-xl flex items-center justify-center shadow-lg border", isUser ? "bg-white text-black border-white" : `bg-gradient-to-br ${theme.gradient} text-white border-white/10`)}
-        aria-label={isUser ? "Your message" : "AI response"}
-      >
-        {isUser ? <User size={18} /> : <Bot size={18} />}
+      
+      {/* UPDATED AVATAR */}
+      <div className={clsx(
+        "w-9 h-9 shrink-0 rounded-xl flex items-center justify-center shadow-lg border overflow-hidden", 
+        isUser ? "bg-white text-black border-white" : `bg-gradient-to-br ${theme.gradient} text-white border-white/10`
+      )}>
+        {isUser ? (
+          <User size={18} />
+        ) : (
+          // Replaced image with clean Brain icon
+          <Brain size={18} className="text-white/90" />
+        )}
       </div>
+
       <div className={clsx("flex-1 min-w-0 max-w-3xl", isUser ? "text-right" : "")}>
         <div className={clsx("flex items-center gap-2 mb-2", isUser ? "justify-end" : "")}>
-          <span className="text-xs font-semibold text-white/80">{isUser ? 'You' : 'Lumina'}</span>
+          <span className="text-xs font-semibold text-white/80">{isUser ? 'You' : 'OmniLab'}</span>
           {!isUser && <span className={`text-[9px] ${theme.softBg} ${theme.accentText} px-1.5 py-0.5 rounded border border-white/10 uppercase tracking-wider font-bold`}>AI</span>}
         </div>
-        {mainContent && (
-          <div 
-            className={clsx("leading-7 font-light tracking-wide", isUser ? "bg-[#1A1A1A] inline-block p-4 rounded-3xl rounded-tr-sm text-white/90 border border-white/10 shadow-md" : "text-gray-300")}
-            style={{ fontSize: `${fontSize}px` }}
-          >
-            <Markdown 
-              remarkPlugins={[remarkGfm]} 
-              components={{ 
+        <div className={clsx("leading-7 font-light tracking-wide", isUser ? "bg-[#1A1A1A] inline-block p-4 rounded-3xl rounded-tr-sm text-white/90 border border-white/10 shadow-md" : "text-gray-300")} style={{ fontSize: `${fontSize}px` }}>
+            <Markdown remarkPlugins={[remarkGfm]} components={{ 
                 code({node, inline, className, children, ...props}) { 
                   const match = /language-(\w+)/.exec(className || ''); 
-                  return !inline && match ? (
-                    <CodeBlock language={match[1]} children={children} />
-                  ) : (
-                    <code {...props} className="bg-white/10 px-1.5 py-0.5 rounded text-white font-mono text-[0.9em] border border-white/5 mx-1">
-                      {children}
-                    </code>
-                  );
+                  return !inline && match ? <CodeBlock language={match[1]} children={children} /> : <code {...props} className="bg-white/10 px-1.5 py-0.5 rounded text-white font-mono text-[0.9em] border border-white/5 mx-1">{children}</code>;
                 },
                 blockquote: ({children}) => <Callout theme={theme}>{children}</Callout>,
                 table: ({children}) => <div className="overflow-x-auto my-6 border border-white/10 rounded-2xl"><table className="w-full text-left text-sm">{children}</table></div>,
                 th: ({children}) => <th className="bg-[#111] p-4 font-semibold border-b border-white/10 text-gray-200">{children}</th>,
                 td: ({children}) => <td className="p-4 border-b border-white/5 text-gray-400">{children}</td>,
-                a: ({href, children}) => <a href={href} target="_blank" rel="noopener noreferrer" className={`${theme.accentText} hover:underline underline-offset-4`}>{children}</a>,
-                p: ({children}) => <p className="mb-4 last:mb-0">{children}</p>
-              }}
-            >
+                a: ({href, children}) => <a href={href} target="_blank" rel="noopener noreferrer" className={`${theme.accentText} hover:underline underline-offset-4`}>{children}</a>
+              }}>
               {mainContent}
             </Markdown>
-
-          </div>
-        )}
+        </div>
       </div>
     </div>
   );
 });
 
-MessageBubble.displayName = 'MessageBubble';
-
-const QuickActions = ({ onAction, settings, theme }) => {
+const QuickActions = ({ onAction, settings, theme, runFlashpoint, runBlueprint }) => {
   const studentActions = [
-    { label: 'Explain Simple', icon: BookOpen, cmd: '/explain_simple' }, 
-    { label: 'Quiz Me', icon: BrainCircuit, cmd: '/quiz' }, 
-    { label: 'Study Guide', icon: GraduationCap, cmd: '/study' }, 
-    { label: 'Essay', icon: PenTool, cmd: '/outline' }
+    { label: 'Flashpoint', icon: BrainCircuit, action: runFlashpoint }, 
+    { label: 'Explain Simple', icon: BookOpen, cmd: 'Explain this simply.' }, 
+    { label: 'Study Guide', icon: GraduationCap, cmd: 'Create a study guide.' }, 
+    { label: 'Essay', icon: PenTool, cmd: 'Create an essay outline.' }
   ];
-  
   const devActions = [
-    { label: 'Code Review', icon: Eye, cmd: '/review' }, 
-    { label: 'Security Audit', icon: ShieldAlert, cmd: '/audit' }, 
-    { label: 'Unit Tests', icon: Code2, cmd: '/test' }, 
-    { label: 'Refactor', icon: Zap, cmd: '/refactor' }
+    { label: 'Blueprint', icon: Layers, action: () => runBlueprint("Basic Node.js API") }, 
+    { label: 'Code Review', icon: Eye, cmd: 'Review this code.' }, 
+    { label: 'Refactor', icon: Zap, cmd: 'Refactor for performance.' }, 
+    { label: 'Diff Doctor', icon: GitBranch, cmd: 'Analyze git diff.' }
   ];
-  
   const actions = settings.developerMode ? devActions : studentActions;
 
   return (
@@ -204,9 +134,8 @@ const QuickActions = ({ onAction, settings, theme }) => {
       {actions.map((action) => (
         <button 
           key={action.label} 
-          onClick={() => onAction(action.cmd)} 
+          onClick={() => action.action ? action.action() : onAction(action.cmd)} 
           className={`group flex items-center gap-2 px-3 py-1.5 bg-[#151515] border border-white/10 rounded-full text-[11px] text-gray-400 hover:text-white ${theme.hoverBg} transition-all whitespace-nowrap shadow-sm`}
-          aria-label={action.label}
         >
           <action.icon size={14} className={`${theme.accentText} opacity-70 group-hover:opacity-100 transition-colors`} />
           <span className="font-medium tracking-wide">{action.label}</span>
@@ -217,177 +146,68 @@ const QuickActions = ({ onAction, settings, theme }) => {
 };
 
 export const Workspace = () => {
-  const { messages, sendMessage, isLoading, isOllamaRunning, settings, theme } = useLumina();
+  const { messages, sendMessage, isLoading, isOllamaRunning, settings, theme, activeArtifact, closeLabBench, runFlashpoint, runBlueprint } = useLumina();
   const [input, setInput] = useState("");
-  const [connectionStatus, setConnectionStatus] = useState('connected'); // 'connected', 'streaming', 'error'
   const bottomRef = useRef(null);
   const textareaRef = useRef(null);
 
-  // Auto-scroll on new messages
-  useEffect(() => { 
-    bottomRef.current?.scrollIntoView({ behavior: 'smooth', block: 'nearest' }); 
-  }, [messages, isLoading]);
+  useEffect(() => { bottomRef.current?.scrollIntoView({ behavior: 'smooth', block: 'nearest' }); }, [messages, isLoading]);
+  useEffect(() => { if (textareaRef.current) { textareaRef.current.style.height = 'auto'; textareaRef.current.style.height = Math.min(textareaRef.current.scrollHeight, 150) + 'px'; } }, [input]);
 
-  // Textarea auto-height
-  useEffect(() => { 
-    if (textareaRef.current) { 
-      textareaRef.current.style.height = 'auto'; 
-      textareaRef.current.style.height = Math.min(textareaRef.current.scrollHeight, 150) + 'px'; 
-    } 
-  }, [input]);
-
-  // Update connection status based on streaming
-  useEffect(() => {
-    if (isLoading) {
-      setConnectionStatus('streaming');
-    } else {
-      setConnectionStatus('connected');
-    }
-  }, [isLoading]);
-
-  const handleSend = useCallback(() => { 
-    if (!input.trim()) return; 
-    
-    // Use command registry for cleaner logic
-    const finalPrompt = COMMAND_REGISTRY[input.trim()] || input;
-    sendMessage(finalPrompt); 
-    setInput(""); 
-  }, [input, sendMessage]);
-
-  const handleQuickAction = useCallback((cmd) => { 
-    setInput(cmd + " "); 
-    if (textareaRef.current) textareaRef.current.focus(); 
-  }, []);
-
-  const handleKeyDown = useCallback((e) => {
-    if (e.key === 'Enter' && !e.shiftKey) {
-      e.preventDefault();
-      handleSend();
-    }
-  }, [handleSend]);
-
-  // Improved loading logic
-  const showLoadingDots = useMemo(() => {
-    if (!isLoading) return false;
-    if (messages.length === 0) return true;
-    
-    const lastMsg = messages[messages.length - 1];
-    const cleanContent = lastMsg.content
-      .replace(/<thinking>[\s\S]*?<\/thinking>/gi, '')
-      .replace(/<thinking>[\s\S]*$/gi, '')
-      .trim();
-    
-    return cleanContent.length === 0;
-  }, [isLoading, messages]);
+  const handleSend = useCallback(() => { if (!input.trim()) return; const finalPrompt = COMMAND_REGISTRY[input.trim()] || input; sendMessage(finalPrompt); setInput(""); }, [input, sendMessage]);
+  const handleKeyDown = useCallback((e) => { if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); handleSend(); } }, [handleSend]);
 
   if (!isOllamaRunning) {
     return (
       <div className="flex-1 flex flex-col items-center justify-center text-gray-500">
-        <div className="p-8 rounded-full bg-white/5 mb-6 animate-pulse-slow border border-white/5">
-          <WifiOff size={48} className="opacity-40 text-red-400" />
-        </div>
+        <div className="p-8 rounded-full bg-white/5 mb-6 animate-pulse-slow border border-white/5"><WifiOff size={48} className="opacity-40 text-red-400" /></div>
         <p className="font-mono text-xs tracking-[0.2em] uppercase text-gray-600">System Offline • Run Ollama</p>
       </div>
     );
   }
 
   return (
-    <div className="flex-1 flex flex-col min-h-0 relative h-full bg-[#020202]/40 backdrop-blur-sm">
-      <div className="flex-1 overflow-y-auto px-6 pb-40 custom-scrollbar scroll-smooth">
-        <div className="max-w-4xl mx-auto space-y-10 pt-12">
-          {messages.length === 0 && (
-            <div className="mt-32 text-center space-y-8 animate-enter">
-              <div className={`inline-block p-6 rounded-[2rem] ${theme.softBg} border ${theme.primaryBorder} mb-4 shadow-[0_0_80px_-20px_rgba(99,102,241,0.25)]`}>
-                <Sparkles size={56} className={theme.accentText} />
+    <div className="flex h-full overflow-hidden bg-[#020202]/40 backdrop-blur-sm">
+      <div className="flex-1 flex flex-col min-w-0 relative h-full">
+        <div className="flex-1 overflow-y-auto px-6 pb-40 custom-scrollbar scroll-smooth">
+          <div className="max-w-4xl mx-auto space-y-10 pt-12">
+            {messages.length === 0 && (
+              <div className="mt-32 text-center space-y-8 animate-enter">
+                <div className={`inline-block p-6 rounded-[2rem] ${theme.softBg} border ${theme.primaryBorder} mb-4 shadow-[0_0_80px_-20px_rgba(99,102,241,0.25)]`}>
+                  <Sparkles size={56} className={theme.accentText} />
+                </div>
+                <h1 className="text-5xl font-bold text-white tracking-tighter">OmniLab <span className={theme.accentText}>{settings.developerMode ? 'Forge' : 'Nexus'}</span></h1>
+                <p className="text-gray-500 max-w-md mx-auto text-sm leading-relaxed font-light">{settings.developerMode ? 'Advanced Architecture & Engineering Environment.' : 'Universal Research & Knowledge Synthesis Engine.'}</p>
+                <div className="mt-8">
+                  <QuickActions onAction={(cmd) => setInput(cmd)} settings={settings} theme={theme} runFlashpoint={runFlashpoint} runBlueprint={runBlueprint} />
+                </div>
               </div>
-              <h1 className="text-5xl font-bold text-white tracking-tighter">
-                Lumina {settings.developerMode ? 'Prime' : 'Academy'}
-              </h1>
-              <p className="text-gray-500 max-w-md mx-auto text-sm leading-relaxed font-light">
-                {settings.developerMode 
-                  ? 'Advanced Neural Engineering Environment.' 
-                  : 'Your personal AI research and study companion.'
-                }
-              </p>
-              {/* Show quick actions on empty state */}
-              <div className="mt-8">
-                <QuickActions onAction={handleQuickAction} settings={settings} theme={theme} />
-              </div>
-            </div>
-          )}
-          
-          {/* Messages */}
-          {messages.map((msg, idx) => (
-            <MessageBubble 
-              key={idx} 
-              msg={msg} 
-              theme={theme} 
-              fontSize={settings.fontSize} 
-              isStreaming={isLoading && idx === messages.length - 1}
-            />
-          ))}
-          
-          {/* Loading Pulse - Only visible if text hasn't started yet */}
-          {showLoadingDots && (
-            <div className="flex items-center gap-4 px-4 py-4 ml-[60px] animate-fade-in">
-              <div className="flex space-x-1.5">
-                <div className={`w-1.5 h-1.5 ${theme.primaryBg} rounded-full animate-bounce [animation-delay:-0.3s]`} aria-hidden="true" />
-                <div className={`w-1.5 h-1.5 ${theme.primaryBg} rounded-full animate-bounce [animation-delay:-0.15s]`} aria-hidden="true" />
-                <div className={`w-1.5 h-1.5 ${theme.primaryBg} rounded-full animate-bounce`} aria-hidden="true" />
-              </div>
-              <span className={`text-[10px] ${theme.accentText} font-mono animate-pulse tracking-[0.2em] uppercase`}>
-                {settings.developerMode ? 'COMPUTING...' : 'THINKING...'}
-              </span>
-            </div>
-          )}
-          
-          {/* Streaming indicator */}
-          {isLoading && !showLoadingDots && (
-            <div className="flex items-center gap-2 px-4 py-2 ml-[60px] text-[9px] text-gray-500 animate-pulse">
-              <Wifi size={12} className="text-emerald-400" />
-              <span className="font-mono">STREAMING...</span>
-            </div>
-          )}
-          
-          <div ref={bottomRef} />
-        </div>
-      </div>
-      
-      <div className="absolute bottom-0 left-0 right-0 bg-gradient-to-t from-[#000000] via-[#000000] to-transparent pt-20 pb-4 pointer-events-none">
-        <div className="max-w-3xl mx-auto pointer-events-auto flex flex-col gap-3 px-6">
-          {!isLoading && messages.length > 0 && (
-            <QuickActions onAction={handleQuickAction} settings={settings} theme={theme} />
-          )}
-          
-          <div className={`relative flex items-end gap-3 bg-[#0A0A0A]/95 backdrop-blur-2xl border border-white/10 rounded-[2rem] p-2 shadow-2xl ring-1 ring-white/5 transition-all ${isLoading ? 'ring-emerald-500/30 border-emerald-500/30' : 'focus-within:ring-indigo-500/30 focus-within:border-indigo-500/30'}`}>
-            <textarea 
-              ref={textareaRef} 
-              value={input} 
-              onChange={(e) => setInput(e.target.value)} 
-              onKeyDown={handleKeyDown}
-              placeholder={`Message ${settings.developerMode ? 'Prime' : 'Lumina'}...`} 
-              className="w-full bg-transparent border-none focus:ring-0 text-white placeholder-gray-500 text-sm resize-none max-h-32 min-h-[24px] py-3 px-4 custom-scrollbar font-medium outline-none" 
-              rows={1}
-              aria-label="Message input"
-            />
-            <button 
-              onClick={handleSend} 
-              disabled={isLoading || !input.trim()} 
-              className={`mb-1 mr-1 p-2.5 rounded-full bg-white text-black ${theme.hoverBg} disabled:opacity-50 disabled:bg-gray-800 disabled:text-gray-600 transition-all shadow-lg shadow-white/5`}
-              aria-label={isLoading ? "Stop generation" : "Send message"}
-            >
-              {isLoading ? <StopCircle size={16} /> : <ArrowUp size={16} />}
-            </button>
+            )}
+            {messages.map((msg, idx) => <MessageBubble key={idx} msg={msg} theme={theme} fontSize={settings.fontSize} isStreaming={isLoading && idx === messages.length - 1} />)}
+            {isLoading && messages[messages.length-1]?.role !== 'assistant' && (
+               <div className="flex items-center gap-4 px-4 py-4 ml-[60px] animate-fade-in">
+                 <div className="flex space-x-1.5"><div className={`w-1.5 h-1.5 ${theme.primaryBg} rounded-full animate-bounce`}/><div className={`w-1.5 h-1.5 ${theme.primaryBg} rounded-full animate-bounce [animation-delay:0.1s]`}/><div className={`w-1.5 h-1.5 ${theme.primaryBg} rounded-full animate-bounce [animation-delay:0.2s]`}/></div>
+                 <span className={`text-[10px] ${theme.accentText} font-mono animate-pulse tracking-[0.2em] uppercase`}>Computing...</span>
+               </div>
+            )}
+            <div ref={bottomRef} />
           </div>
-          
-          <div className="text-center flex items-center justify-center gap-2 opacity-30 hover:opacity-100 transition-opacity duration-500">
-            <div className={`w-2 h-2 rounded-full ${connectionStatus === 'connected' ? 'bg-emerald-500' : connectionStatus === 'streaming' ? 'bg-blue-500 animate-pulse' : 'bg-red-500'}`} aria-hidden="true" />
-            <span className="text-[9px] text-gray-600 uppercase tracking-[0.2em] font-medium">
-              Lumina {settings.developerMode ? 'Prime' : 'Core'} OS
-            </span>
+        </div>
+        
+        <div className="absolute bottom-0 left-0 right-0 bg-gradient-to-t from-[#000000] via-[#000000] to-transparent pt-20 pb-4">
+          <div className="max-w-3xl mx-auto pointer-events-auto flex flex-col gap-3 px-6">
+            {!isLoading && messages.length > 0 && (
+              <QuickActions onAction={(cmd) => setInput(cmd)} settings={settings} theme={theme} runFlashpoint={runFlashpoint} runBlueprint={runBlueprint} />
+            )}
+            <div className={`relative flex items-end gap-3 bg-[#0A0A0A]/95 backdrop-blur-2xl border border-white/10 rounded-[2rem] p-2 shadow-2xl ring-1 ring-white/5 transition-all ${isLoading ? 'ring-emerald-500/30 border-emerald-500/30' : 'focus-within:ring-indigo-500/30 focus-within:border-indigo-500/30'}`}>
+              <textarea ref={textareaRef} value={input} onChange={(e) => setInput(e.target.value)} onKeyDown={handleKeyDown} placeholder={`Message ${settings.developerMode ? 'Forge' : 'Nexus'}...`} className="w-full bg-transparent border-none focus:ring-0 text-white placeholder-gray-500 text-sm resize-none max-h-32 min-h-[24px] py-3 px-4 custom-scrollbar font-medium outline-none" rows={1} />
+              <button onClick={handleSend} disabled={isLoading || !input.trim()} className={`mb-1 mr-1 p-2.5 rounded-full bg-white text-black ${theme.hoverBg} disabled:opacity-50 disabled:bg-gray-800 disabled:text-gray-600 transition-all shadow-lg shadow-white/5`}>{isLoading ? <StopCircle size={16} /> : <ArrowUp size={16} />}</button>
+            </div>
+            <div className="text-center flex items-center justify-center gap-2 opacity-30 hover:opacity-100 transition-opacity duration-500"><div className={`w-2 h-2 rounded-full ${isLoading ? 'bg-blue-500 animate-pulse' : 'bg-emerald-500'}`}/><span className="text-[9px] text-gray-600 uppercase tracking-[0.2em] font-medium">OmniLab {settings.developerMode ? 'Forge' : 'Nexus'} OS</span></div>
           </div>
         </div>
       </div>
+      {activeArtifact && <LabBench artifact={activeArtifact} onClose={closeLabBench} theme={theme} />}
     </div>
   );
 };

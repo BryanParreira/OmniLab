@@ -1,6 +1,7 @@
 import React, { useState, useCallback } from 'react';
 import { useLumina } from '../context/LuminaContext';
-import { Plus, MessageSquare, Trash2, Box, Folder, Settings as SettingsIcon, Sliders, Edit2, Check, Calendar, X } from 'lucide-react';
+// UPDATED: Imported Brain icon, removed logo import
+import { Plus, MessageSquare, Trash2, Folder, Settings as SettingsIcon, Sliders, Edit2, Check, Calendar, X, Brain } from 'lucide-react';
 import { motion, AnimatePresence } from 'framer-motion';
 
 export const Sidebar = () => {
@@ -150,21 +151,22 @@ export const Sidebar = () => {
   const handleOpenSettings = useCallback((e) => {
     e.preventDefault();
     e.stopPropagation();
-    console.log('Settings button clicked'); // Debug log
-    console.log('openGlobalSettings function:', openGlobalSettings); // Debug log
-    console.log('Calling openGlobalSettings now...'); // Debug log
     openGlobalSettings();
-    console.log('openGlobalSettings called'); // Debug log
   }, [openGlobalSettings]);
 
   return (
     <div className="flex flex-col h-full rounded-2xl glass-panel overflow-hidden transition-colors duration-500">
       <div className="p-4 pb-2">
-        <div className="flex items-center gap-3 mb-5 px-2 pt-2">
-          <div className={`h-6 w-6 bg-gradient-to-br ${theme.gradient} rounded-md flex items-center justify-center shadow-lg shadow-indigo-500/20`}>
-            <Box size={14} className="text-white" />
+        {/* --- UPDATED LOGO SECTION --- */}
+        <div 
+          className="flex items-center gap-3 mb-5 px-2 pt-2 cursor-move"
+          style={{ WebkitAppRegion: 'drag' }}
+        >
+          {/* Used a gradient background container for the brain icon to make it pop */}
+          <div className={`h-8 w-8 bg-gradient-to-br ${theme.gradient} rounded-lg flex items-center justify-center shadow-lg shadow-indigo-500/20`}>
+            <Brain size={20} className="text-white" />
           </div>
-          <span className="font-semibold text-sm tracking-wide text-white/90">Lumina</span>
+          <span className="font-semibold text-sm tracking-wide text-white/90">OmniLab</span>
         </div>
         
         <div className="flex p-1 bg-black/40 rounded-lg border border-white/5 mb-4" role="tablist">
@@ -393,7 +395,6 @@ export const Sidebar = () => {
         </button>
       </div>
 
-      {/* Project Settings Modal - Only for individual project personas */}
       <AnimatePresence>
         {editingProject && (
           <motion.div 

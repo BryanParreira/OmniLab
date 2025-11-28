@@ -30,6 +30,10 @@ contextBridge.exposeInMainWorld('lumina', {
   updateProjectSettings: (id, systemPrompt) => ipcRenderer.invoke('project:update-settings', { id, systemPrompt }),
   deleteProject: (id) => ipcRenderer.invoke('project:delete', id),
   
+  // --- THIS WAS MISSING! ---
+  scaffoldProject: (projectId, structure) => ipcRenderer.invoke('project:scaffold', { projectId, structure }),
+  // ------------------------
+
   // Advanced Features
   generateGraph: (id) => ipcRenderer.invoke('project:generate-graph', id),
   runDeepResearch: (id, url) => ipcRenderer.invoke('agent:deep-research', { projectId: id, url }),
