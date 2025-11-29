@@ -2,20 +2,18 @@ if (typeof DOMMatrix === 'undefined') { global.DOMMatrix = class DOMMatrix {}; }
 if (typeof ImageData === 'undefined') { global.ImageData = class ImageData {}; }
 if (typeof Path2D === 'undefined') { global.Path2D = class Path2D {}; }
 
-// [CRITICAL] We rely on 'net' for all communication to bypass macOS Sandbox issues
 const { app, BrowserWindow, ipcMain, shell, dialog, net } = require('electron');
 const path = require('path');
 const fs = require('fs');
 const { createTray } = require('./tray.cjs');
 
-// Lazy load heavy dependencies
 const loadPdf = () => require('pdf-parse');
 const loadCheerio = () => require('cheerio');
 const loadGit = () => require('simple-git');
 
 let mainWindow;
 
-// --- PATH MANAGEMENT ---
+// --- PATHS ---
 const getUserDataPath = () => app.getPath('userData');
 const getSessionsPath = () => path.join(getUserDataPath(), 'sessions');
 const getProjectsPath = () => path.join(getUserDataPath(), 'projects');
@@ -27,10 +25,10 @@ const getCalendarPath = () => path.join(getUserDataPath(), 'calendar.json');
   if (!fs.existsSync(dir)) fs.mkdirSync(dir, { recursive: true });
 });
 
-// --- SETTINGS ---
+// --- UPDATED SETTINGS: NO DEFAULT MODEL ---
 const DEFAULT_SETTINGS = {
   ollamaUrl: "http://127.0.0.1:11434",
-  defaultModel: "llama3",
+  defaultModel: "", // EMPTY: Will auto-detect installed models
   contextLength: 8192,
   temperature: 0.3,
   systemPrompt: "",
@@ -64,54 +62,91 @@ function createWindow() {
   
   mainWindow.once('ready-to-show', () => mainWindow.show());
   mainWindow.webContents.setWindowOpenHandler(({ url }) => { shell.openExternal(url); return { action: 'deny' }; });
+  
+  // Clean old settings one time to remove "llama3" if it was stuck
+  // fs.unlink(getSettingsPath(), () => {}); 
+
   return mainWindow;
 }
 
-// --- FILE PROCESSING ---
+// --- SMART FILE ENGINE ---
 async function readProjectFiles(projectFiles) {
-  let context = "";
+  const MAX_CONTEXT_CHARS = 32000; 
+  let currentChars = 0;
+  
+  let context = "--- PROJECT FILE STRUCTURE (Index) ---\n";
+  projectFiles.forEach(f => { context += `- ${f.name}\n`; });
+  context += "\n--- BEGIN FILE CONTENTS ---\n";
+  currentChars += context.length;
+
   for (const file of projectFiles) {
+    if (currentChars >= MAX_CONTEXT_CHARS) {
+      context += `\n[SYSTEM NOTE: Remaining files omitted to fit context window]\n`;
+      break;
+    }
+
     try {
       if (file.type === 'url') {
         const filePath = path.join(getCachePath(), file.cacheFile);
         if (fs.existsSync(filePath)) {
-           const content = await fs.promises.readFile(filePath, 'utf-8');
-           context += `\n>>> SOURCE: ${file.name} (Web)\n${content.slice(0, 20000)}\n`;
+           let content = await fs.promises.readFile(filePath, 'utf-8');
+           if (content.length > 5000) content = content.slice(0, 5000) + "\n...[Web Page Truncated]...";
+           const entry = `\n>>> SOURCE: ${file.name} (Web)\n${content}\n`;
+           if (currentChars + entry.length < MAX_CONTEXT_CHARS) {
+             context += entry;
+             currentChars += entry.length;
+           }
         }
         continue;
       }
+
+      if (!fs.existsSync(file.path)) continue;
       const stats = await fs.promises.stat(file.path);
-      if (stats.size > 15 * 1024 * 1024) continue; 
+      if (stats.size > 5 * 1024 * 1024) continue; 
       
+      let fileContent = "";
       if (file.path.toLowerCase().endsWith('.pdf')) {
         const pdf = loadPdf();
         const dataBuffer = await fs.promises.readFile(file.path);
         const data = await pdf(dataBuffer);
-        context += `\n>>> SOURCE: ${file.name} (PDF)\n${data.text.slice(0, 20000)}\n`;
+        fileContent = data.text;
       } 
-      else if (!['png','jpg','exe','bin','zip','iso'].includes(file.type.toLowerCase())) {
-        const content = await fs.promises.readFile(file.path, 'utf-8');
-        if (content.indexOf('\0') === -1) context += `\n>>> SOURCE: ${file.name}\n${content}\n`;
+      else if (!['png','jpg','jpeg','gif','exe','bin','zip','iso','dll','dmg'].includes(file.type.toLowerCase())) {
+        fileContent = await fs.promises.readFile(file.path, 'utf-8');
+        if (fileContent.indexOf('\0') !== -1) fileContent = "";
       }
-    } catch (e) { console.warn(`Skipped file: ${file.name}`); }
+
+      if (fileContent) {
+        if (fileContent.length > 5000) {
+          fileContent = fileContent.slice(0, 5000) + `\n... [File ${file.name} Truncated] ...`;
+        }
+        const entry = `\n>>> FILE: ${file.name}\n${fileContent}\n`;
+        if (currentChars + entry.length < MAX_CONTEXT_CHARS) {
+          context += entry;
+          currentChars += entry.length;
+        }
+      }
+    } catch (e) { console.warn(`Could not read file ${file.name}:`, e); }
   }
   return context;
 }
 
 async function scanDirectory(dirPath, fileList = []) {
-  const files = await fs.promises.readdir(dirPath, { withFileTypes: true });
-  for (const file of files) {
-    const fullPath = path.join(dirPath, file.name);
-    if (file.isDirectory()) {
-      if (!['node_modules', '.git', 'dist', 'build', '.next', '.vscode', '.idea'].includes(file.name)) {
-        await scanDirectory(fullPath, fileList);
-      }
-    } else {
-      if (!['.DS_Store', 'package-lock.json', 'yarn.lock'].includes(file.name)) {
-        fileList.push({ path: fullPath, name: file.name, type: path.extname(file.name).substring(1) });
+  try {
+    const files = await fs.promises.readdir(dirPath, { withFileTypes: true });
+    for (const file of files) {
+      const fullPath = path.join(dirPath, file.name);
+      if (file.isDirectory()) {
+        if (!['node_modules', '.git', 'dist', 'build', '.next', '.vscode', '.idea', 'target', 'vendor', 'bin', 'obj', 'coverage'].includes(file.name)) {
+          await scanDirectory(fullPath, fileList);
+        }
+      } else {
+        if (!['.DS_Store', 'package-lock.json', 'yarn.lock', 'pnpm-lock.yaml'].includes(file.name)) {
+          fileList.push({ path: fullPath, name: file.name, type: path.extname(file.name).substring(1) });
+        }
       }
     }
-  }
+  } catch (e) {}
   return fileList;
 }
 
@@ -148,22 +183,55 @@ app.whenReady().then(() => {
     return results;
   });
 
-  // --- OLLAMA STREAM HANDLER (REBUILT WITH NET.REQUEST) ---
+  // --- OLLAMA STREAM (AUTO-DETECT MODEL + SMART FILES) ---
   ipcMain.on('ollama:stream-prompt', async (event, { prompt, model, contextFiles, systemPrompt, settings }) => {
     if (!win) return;
     
-    // 1. Setup Configuration
     const config = settings || DEFAULT_SETTINGS;
     let baseUrl = config.ollamaUrl || "http://127.0.0.1:11434";
     if (baseUrl.endsWith('/')) baseUrl = baseUrl.slice(0, -1);
     baseUrl = baseUrl.replace('localhost', '127.0.0.1');
 
-    // 2. Anti-Hallucination Personas
+    // 1. AUTO-DETECT MODEL IF MISSING
+    let selectedModel = model || config.defaultModel;
+    
+    if (!selectedModel) {
+      try {
+        // Fetch list of models from Ollama
+        const tagsReq = net.request(`${baseUrl}/api/tags`);
+        const tagsData = await new Promise((resolve, reject) => {
+          tagsReq.on('response', (res) => {
+            let d = "";
+            res.on('data', c => d += c);
+            res.on('end', () => resolve(d));
+          });
+          tagsReq.on('error', reject);
+          tagsReq.end();
+        });
+        
+        const json = JSON.parse(tagsData);
+        if (json.models && json.models.length > 0) {
+          // Pick the first available model
+          selectedModel = json.models[0].name;
+          // Optionally notify UI (skipping for simplicity/speed)
+        }
+      } catch (e) {
+        win.webContents.send('ollama:error', "No AI models found. Run 'ollama pull llama3' in terminal.");
+        return;
+      }
+    }
+
+    if (!selectedModel) {
+       win.webContents.send('ollama:error', "No model selected and auto-detect failed.");
+       return;
+    }
+
+    // 2. Prepare System Prompt
     const groundingRules = `
 STRICT RULES:
 1. You are an analysis engine, NOT a creative writer.
 2. If [SOURCE_MATERIAL] is provided, your answer must be derived ONLY from it.
-3. If the answer is not in the [SOURCE_MATERIAL], simply state: "I cannot find this information in the provided context."
+3. If the answer is not in the [SOURCE_MATERIAL], state: "I cannot find this information in the provided context."
 4. Do NOT hallucinate facts, filenames, or code.
 `;
     const baseSystem = config.developerMode 
@@ -171,37 +239,35 @@ STRICT RULES:
       : `You are OmniLab Nexus.\n${groundingRules}\nProvide evidence-based answers.`;
     const systemPromptFinal = `${baseSystem}\n${systemPrompt || config.systemPrompt || ""}`;
 
-    // 3. Load Context
+    // 3. Load Files (Smart Engine)
     let contextStr = "";
     if (contextFiles && contextFiles.length > 0) {
       contextStr = await readProjectFiles(contextFiles);
-      win.webContents.send('ollama:chunk', ''); // Ack loading
+      win.webContents.send('ollama:chunk', ''); 
     }
 
     const fullPrompt = contextStr 
       ? `[SOURCE_MATERIAL_START]\n${contextStr}\n[SOURCE_MATERIAL_END]\n\nQUESTION: ${prompt}` 
       : prompt;
 
-    // 4. Construct Request Body
+    // 4. Send Request (Using 'net' for DMG support)
     const requestBody = JSON.stringify({ 
-      model: model || config.defaultModel, 
+      model: selectedModel, 
       prompt: `[SYSTEM]${systemPromptFinal}\n\n[USER]${fullPrompt}`,
       stream: true,
       options: { 
         num_ctx: parseInt(config.contextLength) || 8192, 
-        temperature: contextStr ? 0.1 : 0.4, // Strict if files present
+        temperature: contextStr ? 0.1 : 0.4, 
         num_threads: 8,
         repeat_penalty: 1.1 
       }
     });
 
     try {
-      // 5. Use Electron's Native Net Module (Bypasses Node Network Stack)
       const request = net.request({
         method: 'POST',
         url: `${baseUrl}/api/generate`,
       });
-
       request.setHeader('Content-Type', 'application/json');
 
       request.on('response', (response) => {
@@ -209,29 +275,21 @@ STRICT RULES:
           win.webContents.send('ollama:error', `Ollama Error: ${response.statusCode}`);
           return;
         }
-
-        let buffer = ""; // Holds partial chunks
-
+        let buffer = "";
         response.on('data', (chunk) => {
           buffer += chunk.toString();
           const lines = buffer.split('\n');
-          // Important: Keep the last partial line in the buffer
           buffer = lines.pop(); 
-
           for (const line of lines) {
             if (!line.trim()) continue;
             try {
               const json = JSON.parse(line);
               if (json.response) win.webContents.send('ollama:chunk', json.response);
               if (json.done) win.webContents.send('ollama:chunk', '[DONE]');
-            } catch (e) {
-              // Ignore parse errors on split chunks
-            }
+            } catch (e) {}
           }
         });
-
         response.on('end', () => {
-          // Process any remaining buffer
           if (buffer.trim()) {
             try {
               const json = JSON.parse(buffer);
@@ -240,38 +298,41 @@ STRICT RULES:
             } catch(e) {}
           }
         });
-
         response.on('error', (err) => {
           win.webContents.send('ollama:error', `Stream Error: ${err.message}`);
         });
       });
 
       request.on('error', (err) => {
-        console.error("Net Request Failed:", err);
         win.webContents.send('ollama:error', "Could not connect to AI engine. Is Ollama running?");
       });
 
-      // Send the data
       request.write(requestBody);
       request.end();
-
     } catch (error) {
       win.webContents.send('ollama:error', `Critical Error: ${error.message}`);
     }
   });
 
-  // --- ROBUST JSON GENERATOR (USING NET.REQUEST) ---
   ipcMain.handle('ollama:generate-json', async (e, { prompt, model, settings }) => { 
     const config = settings || DEFAULT_SETTINGS; 
     let baseUrl = config.ollamaUrl || "http://127.0.0.1:11434";
     baseUrl = baseUrl.replace('localhost', '127.0.0.1');
 
+    // Auto-detect for JSON calls too
+    let selectedModel = model || config.defaultModel;
+    if(!selectedModel) {
+        try {
+            const r = await net.fetch(`${baseUrl}/api/tags`);
+            const d = await r.json();
+            if(d.models && d.models.length>0) selectedModel = d.models[0].name;
+        } catch(e){}
+    }
+
     return new Promise((resolve) => {
       const request = net.request({ method: 'POST', url: `${baseUrl}/api/generate` });
       request.setHeader('Content-Type', 'application/json');
-      
       let fullData = "";
-
       request.on('response', (response) => {
         response.on('data', (chunk) => { fullData += chunk.toString(); });
         response.on('end', () => {
@@ -285,35 +346,20 @@ STRICT RULES:
         });
       });
       request.on('error', () => resolve([]));
-      
-      request.write(JSON.stringify({ 
-        model: model || config.defaultModel, 
-        prompt: prompt, 
-        format: 'json', 
-        stream: false, 
-        options: { temperature: 0.1 } 
-      }));
+      request.write(JSON.stringify({ model: selectedModel, prompt: prompt, format: 'json', stream: false, options: { temperature: 0.1 } }));
       request.end();
     });
   });
 
-  // --- STATUS CHECK (USING NET.REQUEST) ---
   ipcMain.handle('ollama:status', async (e, url) => { 
     try {
       let target = url || 'http://127.0.0.1:11434';
       if (target.endsWith('/')) target = target.slice(0, -1);
-      target = target.replace('localhost', '127.0.0.1'); // Fix Mac Localhost issues
-      
+      target = target.replace('localhost', '127.0.0.1');
       const request = net.request(`${target}/api/tags`);
-      
       return new Promise((resolve) => {
-        request.on('response', (response) => {
-          resolve(response.statusCode === 200);
-        });
-        request.on('error', (error) => {
-          console.log("Status Check Failed:", error.message);
-          resolve(false);
-        });
+        request.on('response', (response) => resolve(response.statusCode === 200));
+        request.on('error', () => resolve(false));
         request.end();
       });
     } catch(e){ return false; } 
@@ -324,15 +370,12 @@ STRICT RULES:
       let target = url || 'http://127.0.0.1:11434';
       if (target.endsWith('/')) target = target.slice(0, -1);
       target = target.replace('localhost', '127.0.0.1');
-
       const request = net.request(`${target}/api/tags`);
       let data = "";
       return new Promise((resolve) => {
         request.on('response', (r) => {
            r.on('data', chunk => data += chunk);
-           r.on('end', () => {
-             try { resolve(JSON.parse(data).models.map(m => m.name)); } catch { resolve([]); }
-           });
+           r.on('end', () => { try { resolve(JSON.parse(data).models.map(m => m.name)); } catch { resolve([]); } });
         });
         request.on('error', () => resolve([]));
         request.end();
@@ -340,7 +383,6 @@ STRICT RULES:
     } catch(e) { return []; } 
   });
 
-  // --- CRUD HANDLERS ---
   ipcMain.handle('project:add-url', async (e, { projectId, url }) => { try { const cheerio = loadCheerio(); const response = await fetch(url); const html = await response.text(); const $ = cheerio.load(html); $('script, style, nav, footer, iframe').remove(); const content = $('body').text().replace(/\s\s+/g, ' ').trim(); const filename = `web-${Date.now()}.txt`; await fs.promises.writeFile(path.join(getCachePath(), filename), content, 'utf-8'); const projectPath = path.join(getProjectsPath(), `${projectId}.json`); const projectData = JSON.parse(await fs.promises.readFile(projectPath, 'utf-8')); projectData.files.push({ path: url, name: $('title').text() || url, type: 'url', cacheFile: filename }); await fs.promises.writeFile(projectPath, JSON.stringify(projectData, null, 2)); return projectData.files; } catch (e) { throw new Error("Scrape Failed"); } });
   ipcMain.handle('system:save-file', async (e, { content, filename }) => { const { filePath } = await dialog.showSaveDialog(win, { defaultPath: filename || 'untitled.txt', }); if (filePath) { await fs.promises.writeFile(filePath, content, 'utf-8'); return true; } return false; });
   ipcMain.handle('project:update-settings', async (e, { id, systemPrompt }) => { const p = path.join(getProjectsPath(), `${id}.json`); if (fs.existsSync(p)) { const d = JSON.parse(await fs.promises.readFile(p, 'utf-8')); d.systemPrompt = systemPrompt; await fs.promises.writeFile(p, JSON.stringify(d, null, 2)); return d; } return null; });
@@ -349,13 +391,11 @@ STRICT RULES:
   ipcMain.handle('project:add-files', async (e, projectId) => { const r = await dialog.showOpenDialog(win, { properties: ['openFile', 'multiSelections'] }); if (!r.canceled) { const p = path.join(getProjectsPath(), `${projectId}.json`); const d = JSON.parse(await fs.promises.readFile(p, 'utf-8')); const n = r.filePaths.map(x => ({ path: x, name: path.basename(x), type: path.extname(x).substring(1) })); d.files.push(...n.filter(f => !d.files.some(ex => ex.path === f.path))); await fs.promises.writeFile(p, JSON.stringify(d, null, 2)); return d.files; } return null; });
   ipcMain.handle('project:add-folder', async (e, projectId) => { const r = await dialog.showOpenDialog(win, { properties: ['openDirectory'] }); if (!r.canceled && r.filePaths.length > 0) { const folderPath = r.filePaths[0]; const allFiles = await scanDirectory(folderPath); const p = path.join(getProjectsPath(), `${projectId}.json`); const d = JSON.parse(await fs.promises.readFile(p, 'utf-8')); const newFiles = allFiles.filter(f => !d.files.some(existing => existing.path === f.path)); d.files.push(...newFiles); d.rootPath = folderPath; await fs.promises.writeFile(p, JSON.stringify(d, null, 2)); return d.files; } return null; });
   ipcMain.handle('project:delete', async (e, id) => { await fs.promises.unlink(path.join(getProjectsPath(), `${id}.json`)); return true; });
-  
   ipcMain.handle('session:save', async (e, { id, title, messages, date }) => { const p = path.join(getSessionsPath(), `${id}.json`); let t = title; if(fs.existsSync(p)){ const ex = JSON.parse(await fs.promises.readFile(p,'utf-8')); if(ex.title && ex.title!=="New Chat" && (!title||title==="New Chat")) t = ex.title; } await fs.promises.writeFile(p, JSON.stringify({ id, title:t||"New Chat", messages, date }, null, 2)); return true; });
   ipcMain.handle('session:rename', async (e, { id, title }) => { const p = path.join(getSessionsPath(), `${id}.json`); if(fs.existsSync(p)){ const c = JSON.parse(await fs.promises.readFile(p,'utf-8')); c.title = title; await fs.promises.writeFile(p, JSON.stringify(c,null,2)); return true; } return false; });
   ipcMain.handle('session:list', async () => { const d = getSessionsPath(); const f = await fs.promises.readdir(d); const s = []; for(const x of f){ if(x.endsWith('.json')){ try{ const j=JSON.parse(await fs.promises.readFile(path.join(d,x),'utf-8')); s.push({id:j.id, title:j.title, date:j.date}); }catch(e){} } } return s.sort((a,b)=>new Date(b.date)-new Date(a.date)); });
   ipcMain.handle('session:load', async (e, id) => JSON.parse(await fs.promises.readFile(path.join(getSessionsPath(), `${id}.json`), 'utf-8')));
   ipcMain.handle('session:delete', async (e, id) => { await fs.promises.unlink(path.join(getSessionsPath(), `${id}.json`)); return true; });
-  
   ipcMain.handle('project:generate-graph', async (e, projectId) => { const p = path.join(getProjectsPath(), `${projectId}.json`); if (!fs.existsSync(p)) return { nodes: [], links: [] }; const projectData = JSON.parse(await fs.promises.readFile(p, 'utf-8')); const nodes = []; const links = []; projectData.files.forEach((file) => nodes.push({ id: file.name, group: file.type, path: file.path })); return { nodes, links }; });
   ipcMain.handle('agent:deep-research', async (e, { projectId, url }) => { try { const cheerio = loadCheerio(); const response = await fetch(url); const html = await response.text(); const $ = cheerio.load(html); $('script, style, nav, footer, iframe').remove(); const content = $('body').text().replace(/\s\s+/g, ' ').trim().slice(0, 15000); const filename = `research-${Date.now()}.txt`; await fs.promises.writeFile(path.join(getCachePath(), filename), content, 'utf-8'); const projectPath = path.join(getProjectsPath(), `${projectId}.json`); const projectData = JSON.parse(await fs.promises.readFile(projectPath, 'utf-8')); projectData.files.push({ path: url, name: `[Research] ${$('title').text()}`, type: 'url', cacheFile: filename }); await fs.promises.writeFile(projectPath, JSON.stringify(projectData, null, 2)); return content; } catch (e) { throw new Error("Research Failed"); } });
   ipcMain.handle('system:factory-reset', async () => { try { const del = async (d) => { if(fs.existsSync(d)){ for(const f of await fs.promises.readdir(d)){ const c=path.join(d,f); if((await fs.promises.lstat(c)).isDirectory()) await fs.promises.rm(c,{recursive:true}); else await fs.promises.unlink(c); } } }; await del(getSessionsPath()); await del(getProjectsPath()); await fs.promises.writeFile(getSettingsPath(), JSON.stringify(DEFAULT_SETTINGS)); return true; } catch(e){ return false; } });
