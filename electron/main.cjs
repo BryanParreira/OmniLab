@@ -25,10 +25,10 @@ const getCalendarPath = () => path.join(getUserDataPath(), 'calendar.json');
   if (!fs.existsSync(dir)) fs.mkdirSync(dir, { recursive: true });
 });
 
-// --- UPDATED SETTINGS: NO DEFAULT MODEL ---
+// --- SETTINGS ---
 const DEFAULT_SETTINGS = {
   ollamaUrl: "http://127.0.0.1:11434",
-  defaultModel: "", // EMPTY: Will auto-detect installed models
+  defaultModel: "", 
   contextLength: 8192,
   temperature: 0.3,
   systemPrompt: "",
@@ -62,10 +62,6 @@ function createWindow() {
   
   mainWindow.once('ready-to-show', () => mainWindow.show());
   mainWindow.webContents.setWindowOpenHandler(({ url }) => { shell.openExternal(url); return { action: 'deny' }; });
-  
-  // Clean old settings one time to remove "llama3" if it was stuck
-  // fs.unlink(getSettingsPath(), () => {}); 
-
   return mainWindow;
 }
 
@@ -183,7 +179,7 @@ app.whenReady().then(() => {
     return results;
   });
 
-  // --- OLLAMA STREAM (AUTO-DETECT MODEL + SMART FILES) ---
+  // --- OLLAMA STREAM (FIXED: SEPARATES CHAT FROM CODE) ---
   ipcMain.on('ollama:stream-prompt', async (event, { prompt, model, contextFiles, systemPrompt, settings }) => {
     if (!win) return;
     
@@ -192,12 +188,10 @@ app.whenReady().then(() => {
     if (baseUrl.endsWith('/')) baseUrl = baseUrl.slice(0, -1);
     baseUrl = baseUrl.replace('localhost', '127.0.0.1');
 
-    // 1. AUTO-DETECT MODEL IF MISSING
+    // 1. AUTO-DETECT MODEL
     let selectedModel = model || config.defaultModel;
-    
     if (!selectedModel) {
       try {
-        // Fetch list of models from Ollama
         const tagsReq = net.request(`${baseUrl}/api/tags`);
         const tagsData = await new Promise((resolve, reject) => {
           tagsReq.on('response', (res) => {
@@ -208,38 +202,37 @@ app.whenReady().then(() => {
           tagsReq.on('error', reject);
           tagsReq.end();
         });
-        
         const json = JSON.parse(tagsData);
-        if (json.models && json.models.length > 0) {
-          // Pick the first available model
-          selectedModel = json.models[0].name;
-          // Optionally notify UI (skipping for simplicity/speed)
-        }
+        if (json.models && json.models.length > 0) selectedModel = json.models[0].name;
       } catch (e) {
-        win.webContents.send('ollama:error', "No AI models found. Run 'ollama pull llama3' in terminal.");
+        win.webContents.send('ollama:error', "No AI models found.");
         return;
       }
     }
 
     if (!selectedModel) {
-       win.webContents.send('ollama:error', "No model selected and auto-detect failed.");
+       win.webContents.send('ollama:error', "No model selected.");
        return;
     }
 
-    // 2. Prepare System Prompt
+    // 2. FIXED SYSTEM PROMPT FOR FORMATTING
     const groundingRules = `
 STRICT RULES:
-1. You are an analysis engine, NOT a creative writer.
-2. If [SOURCE_MATERIAL] is provided, your answer must be derived ONLY from it.
-3. If the answer is not in the [SOURCE_MATERIAL], state: "I cannot find this information in the provided context."
-4. Do NOT hallucinate facts, filenames, or code.
+1. If [SOURCE_MATERIAL] is provided, base answers on it.
+2. If the answer is not in the context, say "I don't know."
+3. FORMATTING:
+   - Use plain text for normal conversation.
+   - Do NOT wrap normal sentences in markdown code blocks.
+   - ONLY use markdown code blocks (\`\`\`) for actual code snippets.
 `;
+
     const baseSystem = config.developerMode 
-      ? `You are OmniLab Forge.\n${groundingRules}\nOutput strictly valid code blocks.` 
-      : `You are OmniLab Nexus.\n${groundingRules}\nProvide evidence-based answers.`;
+      ? `You are OmniLab Forge, a Senior Engineer.\n${groundingRules}\nBe concise. If asked for code, output it immediately.` 
+      : `You are OmniLab Nexus, a Research Assistant.\n${groundingRules}\nBe helpful and clear.`;
+      
     const systemPromptFinal = `${baseSystem}\n${systemPrompt || config.systemPrompt || ""}`;
 
-    // 3. Load Files (Smart Engine)
+    // 3. Load Files
     let contextStr = "";
     if (contextFiles && contextFiles.length > 0) {
       contextStr = await readProjectFiles(contextFiles);
@@ -250,7 +243,7 @@ STRICT RULES:
       ? `[SOURCE_MATERIAL_START]\n${contextStr}\n[SOURCE_MATERIAL_END]\n\nQUESTION: ${prompt}` 
       : prompt;
 
-    // 4. Send Request (Using 'net' for DMG support)
+    // 4. Send Request
     const requestBody = JSON.stringify({ 
       model: selectedModel, 
       prompt: `[SYSTEM]${systemPromptFinal}\n\n[USER]${fullPrompt}`,
@@ -304,7 +297,7 @@ STRICT RULES:
       });
 
       request.on('error', (err) => {
-        win.webContents.send('ollama:error', "Could not connect to AI engine. Is Ollama running?");
+        win.webContents.send('ollama:error', "Could not connect to AI engine.");
       });
 
       request.write(requestBody);
@@ -319,7 +312,6 @@ STRICT RULES:
     let baseUrl = config.ollamaUrl || "http://127.0.0.1:11434";
     baseUrl = baseUrl.replace('localhost', '127.0.0.1');
 
-    // Auto-detect for JSON calls too
     let selectedModel = model || config.defaultModel;
     if(!selectedModel) {
         try {
