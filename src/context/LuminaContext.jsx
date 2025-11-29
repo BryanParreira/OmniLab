@@ -26,10 +26,10 @@ const messagesReducer = (state, action) => {
 
 export const LuminaProvider = ({ children }) => {
   const [settings, setSettings] = useState({
-    ollamaUrl: "[http://127.0.0.1:11434](http://127.0.0.1:11434)",
+    ollamaUrl: "http://127.0.0.1:11434",
     defaultModel: "",
     contextLength: 8192,
-    temperature: 0.7,
+    temperature: 0.3,
     systemPrompt: "",
     developerMode: false,
     fontSize: 14,
@@ -141,29 +141,26 @@ export const LuminaProvider = ({ children }) => {
     return () => clearTimeout(timer);
   }, [messages, sessionId, isLoading, isInitialized]);
 
-  useEffect(() => {
-    const refresh = async () => {
-      if (settings.developerMode && activeProject) {
-        try {
-          const status = await window.lumina.getGitStatus(activeProject.id);
-          setGitStatus(status);
-        } catch (e) { console.warn('Git status failed:', e); }
-      } else { setGitStatus(null); }
-    };
-    refresh();
-  }, [activeProject, settings.developerMode]);
-
+  // --- REFRESH GRAPH & GIT WHEN PROJECT CHANGES ---
   useEffect(() => {
     const refresh = async () => {
       if (activeProject) {
         try {
           const data = await window.lumina.generateGraph(activeProject.id);
           setGraphData(data || { nodes: [], links: [] });
-        } catch (e) { console.warn('Graph generation failed:', e); }
+          
+          if (settings.developerMode) {
+            const status = await window.lumina.getGitStatus(activeProject.id);
+            setGitStatus(status);
+          }
+        } catch (e) { console.warn('Project data refresh failed:', e); }
+      } else {
+        setGitStatus(null);
+        setGraphData({ nodes: [], links: [] });
       }
     };
     refresh();
-  }, [activeProject]);
+  }, [activeProject, settings.developerMode]);
 
   const refreshModels = useCallback(async () => {
     try {
@@ -199,7 +196,7 @@ export const LuminaProvider = ({ children }) => {
       if (window.lumina) await window.lumina.resetSystem();
       setSessions([]); setProjects([]); messagesDispatch({ type: 'CLEAR_MESSAGES' });
       setActiveProject(null); setCalendarEvents([]);
-      setSettings({ ollamaUrl: "[http://127.0.0.1:11434](http://127.0.0.1:11434)", defaultModel: "", contextLength: 8192, temperature: 0.7, systemPrompt: "", developerMode: false, fontSize: 14, chatDensity: 'comfortable' });
+      setSettings({ ollamaUrl: "http://127.0.0.1:11434", defaultModel: "", contextLength: 8192, temperature: 0.3, systemPrompt: "", developerMode: false, fontSize: 14, chatDensity: 'comfortable' });
       await startNewChat();
     } catch (e) { console.error('Factory reset failed:', e); }
   }, []);
@@ -225,16 +222,54 @@ export const LuminaProvider = ({ children }) => {
     } catch (e) { console.error('Project settings update failed:', e); }
   }, [activeProject]);
 
+  // --- CRITICAL FIX: ENSURE FILES SYNC CORRECTLY ---
   const updateProjectFiles = useCallback((newFiles) => {
     if (!activeProject) return;
-    setActiveProject(prev => ({ ...prev, files: newFiles }));
-    setProjects(prev => prev.map(p => p.id === activeProject.id ? { ...p, files: newFiles } : p));
+    
+    // 1. Update the Active Project State immediately
+    const updatedProject = { ...activeProject, files: newFiles };
+    setActiveProject(updatedProject);
+    
+    // 2. Update the Projects List (The "Master Record")
+    setProjects(prev => prev.map(p => p.id === activeProject.id ? updatedProject : p));
   }, [activeProject]);
 
-  const addFiles = useCallback(async () => { if (!activeProject) return; try { const newFiles = await window.lumina.addFilesToProject(activeProject.id); if (newFiles) updateProjectFiles(newFiles); } catch (e) { console.error('Add files failed:', e); } }, [activeProject, updateProjectFiles]);
-  const addFolder = useCallback(async () => { if (!activeProject) return; try { const newFiles = await window.lumina.addFolderToProject(activeProject.id); if (newFiles) updateProjectFiles(newFiles); } catch (e) { console.error('Add folder failed:', e); } }, [activeProject, updateProjectFiles]);
-  const addUrl = useCallback(async (url) => { if (!activeProject) return; try { const newFiles = await window.lumina.addUrlToProject(activeProject.id, url); if (newFiles) updateProjectFiles(newFiles); } catch (e) { console.error('Add URL failed:', e); } }, [activeProject, updateProjectFiles]);
-  const deleteProject = useCallback(async (e, id) => { e.stopPropagation(); try { if (window.lumina) await window.lumina.deleteProject(id); setProjects(prev => prev.filter(p => p.id !== id)); if (activeProject?.id === id) { setActiveProject(null); setCurrentView('chat'); } } catch (e) { console.error('Project deletion failed:', e); } }, [activeProject]);
+  const addFiles = useCallback(async () => { 
+    if (!activeProject) return; 
+    try { 
+      const newFiles = await window.lumina.addFilesToProject(activeProject.id); 
+      if (newFiles) updateProjectFiles(newFiles); 
+    } catch (e) { console.error('Add files failed:', e); } 
+  }, [activeProject, updateProjectFiles]);
+
+  const addFolder = useCallback(async () => { 
+    if (!activeProject) return; 
+    try { 
+      // This call returns the FULL list of files after adding the folder
+      const newFiles = await window.lumina.addFolderToProject(activeProject.id); 
+      if (newFiles) updateProjectFiles(newFiles); 
+    } catch (e) { console.error('Add folder failed:', e); } 
+  }, [activeProject, updateProjectFiles]);
+
+  const addUrl = useCallback(async (url) => { 
+    if (!activeProject) return; 
+    try { 
+      const newFiles = await window.lumina.addUrlToProject(activeProject.id, url); 
+      if (newFiles) updateProjectFiles(newFiles); 
+    } catch (e) { console.error('Add URL failed:', e); } 
+  }, [activeProject, updateProjectFiles]);
+
+  const deleteProject = useCallback(async (e, id) => { 
+    e.stopPropagation(); 
+    try { 
+      if (window.lumina) await window.lumina.deleteProject(id); 
+      setProjects(prev => prev.filter(p => p.id !== id)); 
+      if (activeProject?.id === id) { 
+        setActiveProject(null); 
+        setCurrentView('chat'); 
+      } 
+    } catch (e) { console.error('Project deletion failed:', e); } 
+  }, [activeProject]);
 
   const runDeepResearch = useCallback(async (url) => {
     if (!activeProject) return;
@@ -254,20 +289,47 @@ export const LuminaProvider = ({ children }) => {
     }
   }, [activeProject, currentModel, settings, updateProjectFiles]);
 
+  // --- CORE AI SEND MESSAGE (WITH FIX) ---
   const sendMessage = useCallback((text) => {
     if (!text.trim() || isLoading || !currentModel) return;
+    
     messagesDispatch({ type: 'ADD_USER_MESSAGE', payload: text });
     messagesDispatch({ type: 'ADD_ASSISTANT_MESSAGE' });
     setIsLoading(true);
+
     try {
-      const contextFiles = activeProject?.files || [];
-      const systemPrompt = activeProject?.systemPrompt || settings.systemPrompt;
-      window.lumina.sendPrompt(text, currentModel, contextFiles, systemPrompt, settings, activeProject?.id);
+      // FIX: LIVE LOOKUP
+      // Instead of trusting 'activeProject' directly (which might be stale),
+      // we look up the project in the master 'projects' list to get the latest files.
+      let contextFiles = [];
+      let systemPrompt = settings.systemPrompt;
+      let pid = null;
+
+      if (activeProject) {
+        pid = activeProject.id;
+        const liveProject = projects.find(p => p.id === activeProject.id);
+        if (liveProject) {
+           contextFiles = liveProject.files || [];
+           systemPrompt = liveProject.systemPrompt || settings.systemPrompt;
+        } else {
+           // Fallback if lookup fails
+           contextFiles = activeProject.files || [];
+        }
+      }
+
+      // Debug Log for You
+      console.log("Sending to AI:", {
+        model: currentModel,
+        fileCount: contextFiles.length,
+        firstFile: contextFiles[0]?.name
+      });
+
+      window.lumina.sendPrompt(text, currentModel, contextFiles, systemPrompt, settings, pid);
     } catch (e) {
       console.error('Send message failed:', e);
       setIsLoading(false);
     }
-  }, [isLoading, currentModel, activeProject, settings]);
+  }, [isLoading, currentModel, activeProject, projects, settings]);
 
   const renameChat = useCallback(async (id, newTitle) => { try { if (window.lumina) { await window.lumina.renameSession(id, newTitle); const updatedSessions = await window.lumina.getSessions(); setSessions(updatedSessions); } } catch (e) { console.error('Rename chat failed:', e); } }, []);
   const startNewChat = useCallback(async () => { try { if (messages.length > 0) { const firstUserMsg = messages.find(m => m.role === 'user'); const title = firstUserMsg?.content.slice(0, 50) || "New Chat"; if (window.lumina) { await window.lumina.saveSession({ id: sessionId, title, messages, date: new Date().toISOString() }); const updatedSessions = await window.lumina.getSessions(); setSessions(updatedSessions); } } messagesDispatch({ type: 'CLEAR_MESSAGES' }); setSessionId(uuidv4()); setIsLoading(false); setCurrentView('chat'); } catch (e) { console.error('Start new chat failed:', e); } }, [messages, sessionId]);
