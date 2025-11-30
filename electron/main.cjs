@@ -11,7 +11,10 @@ const loadPdf = () => require('pdf-parse');
 const loadCheerio = () => require('cheerio');
 const loadGit = () => require('simple-git');
 
+// --- GLOBAL VARIABLES ---
+// Important: These must be global to prevent Garbage Collection
 let mainWindow;
+let tray = null; 
 
 // --- PATHS ---
 const getUserDataPath = () => app.getPath('userData');
@@ -153,7 +156,9 @@ const gitHandler = {
 
 app.whenReady().then(() => {
   const win = createWindow();
-  createTray(win);
+  
+  // --- CRITICAL FIX: Assign tray to global variable ---
+  tray = createTray(win); 
 
   ipcMain.handle('settings:load', async () => {
     try { if (fs.existsSync(getSettingsPath())) { const data = JSON.parse(await fs.promises.readFile(getSettingsPath(), 'utf-8')); return { ...DEFAULT_SETTINGS, ...data }; } } catch (e) { } return DEFAULT_SETTINGS;
@@ -375,7 +380,7 @@ STRICT RULES:
     } catch(e) { return []; } 
   });
 
-  // --- AI CALENDAR PLANNER (THE MISSING PIECE) ---
+  // --- AI CALENDAR PLANNER ---
   ipcMain.handle('agent:calendar-plan', async (e, { topic, endDate, hoursPerDay, goals }) => {
     try {
       // 1. Get Config & Model
