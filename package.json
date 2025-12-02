@@ -1,7 +1,7 @@
 {
   "name": "omnilab",
   "private": true,
-  "version": "2.0.0",
+  "version": "1.0.0",
   "type": "module",
   "main": "electron/main.cjs",
   "description": "Advanced AI Research & Engineering Environment",
@@ -16,6 +16,8 @@
     "cheerio": "^1.0.0-rc.12",
     "clsx": "^2.1.1",
     "cross-env": "^7.0.3",
+    "electron-log": "^5.1.0",
+    "electron-updater": "^6.1.8",
     "framer-motion": "^11.0.8",
     "lucide-react": "^0.344.0",
     "mermaid": "^10.9.0",
@@ -45,6 +47,13 @@
   "build": {
     "appId": "com.omnilab.app",
     "productName": "OmniLab",
+    "publish": [
+      {
+        "provider": "github",
+        "owner": "YOUR_GITHUB_USERNAME",
+        "repo": "YOUR_REPO_NAME"
+      }
+    ],
     "directories": {
       "output": "dist_electron",
       "buildResources": "build"

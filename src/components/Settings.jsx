@@ -3,7 +3,7 @@ import { useLumina } from '../context/LuminaContext';
 import { 
   X, Save, Server, Cpu, Brain, Sliders, Monitor, Type, Database, 
   Terminal, BookOpen, Shield, Zap, Check, ChevronDown, RefreshCw, 
-  AlertCircle, Sparkles, Info, Github, Bug, FileText, ExternalLink 
+  AlertCircle, Sparkles, Info, Github, Bug, FileText, ExternalLink, Download, CheckCircle
 } from 'lucide-react';
 import { motion, AnimatePresence } from 'framer-motion';
 
@@ -95,9 +95,26 @@ export const Settings = ({ isOpen, onClose }) => {
   const [showConfirmReset, setShowConfirmReset] = useState(false);
   const [saveSuccess, setSaveSuccess] = useState(false);
 
+  // Update State
+  const [updateStatus, setUpdateStatus] = useState('idle'); // idle, checking, available, downloading, downloaded, error, not-available
+  const [updateMessage, setUpdateMessage] = useState('');
+  const [downloadProgress, setDownloadProgress] = useState(0);
+
   const localTheme = useMemo(() => getTheme(form.developerMode), [form.developerMode]);
 
   useEffect(() => { setForm(settings); setHasChanges(false); }, [settings]);
+
+  // Setup Update Listener
+  useEffect(() => {
+    if (window.lumina && window.lumina.onUpdateMessage) {
+      const cleanup = window.lumina.onUpdateMessage((data) => {
+        setUpdateStatus(data.status);
+        setUpdateMessage(data.text);
+        if (data.progress) setDownloadProgress(Math.floor(data.progress));
+      });
+      return cleanup;
+    }
+  }, []);
 
   const handleFormChange = useCallback((updates) => {
     setForm(prev => ({ ...prev, ...updates }));
@@ -136,7 +153,30 @@ export const Settings = ({ isOpen, onClose }) => {
     }
   }, [factoryReset, onClose]);
 
-  // Helper to open external links
+  // Update Handlers
+  const checkForUpdates = () => {
+    if (window.lumina && window.lumina.checkForUpdates) {
+      setUpdateStatus('checking');
+      setUpdateMessage('Checking for updates...');
+      window.lumina.checkForUpdates();
+    } else {
+      setUpdateStatus('error');
+      setUpdateMessage('Update API not found (Browser Mode?)');
+    }
+  };
+
+  const startDownload = () => {
+     if (window.lumina && window.lumina.downloadUpdate) {
+        window.lumina.downloadUpdate();
+     }
+  };
+
+  const installUpdate = () => {
+    if (window.lumina && window.lumina.quitAndInstall) {
+      window.lumina.quitAndInstall();
+    }
+  };
+
   const openLink = (url) => {
     window.open(url, '_blank');
   };
@@ -178,8 +218,7 @@ export const Settings = ({ isOpen, onClose }) => {
             <NavButton active={activeTab === 'interface'} onClick={() => setActiveTab('interface')} icon={Monitor} label="Interface" desc="Visuals & Layout" theme={localTheme} />
             <NavButton active={activeTab === 'data'} onClick={() => setActiveTab('data')} icon={Database} label="Data Management" desc="Storage & Reset" theme={localTheme} />
             <div className="flex-1"></div>
-            {/* New About Button */}
-            <NavButton active={activeTab === 'about'} onClick={() => setActiveTab('about')} icon={Info} label="About OmniLab" desc="Docs & Support" theme={localTheme} />
+            <NavButton active={activeTab === 'about'} onClick={() => setActiveTab('about')} icon={Info} label="About OmniLab" desc="Docs & Updates" theme={localTheme} />
           </div>
 
           <div className="flex-1 p-10 overflow-y-auto custom-scrollbar bg-[#050505]/50 backdrop-blur-sm">
@@ -259,7 +298,7 @@ export const Settings = ({ isOpen, onClose }) => {
                   </div>
                 )}
 
-                {/* --- ABOUT TAB --- */}
+                {/* --- ABOUT TAB (UPDATED) --- */}
                 {activeTab === 'about' && (
                   <div className="space-y-8">
                     <div className="flex flex-col items-center justify-center p-8 text-center bg-white/5 rounded-2xl border border-white/5 mb-8">
@@ -267,8 +306,77 @@ export const Settings = ({ isOpen, onClose }) => {
                           <Brain size={40} className="text-white" />
                        </div>
                        <h3 className="text-2xl font-bold text-white tracking-tight">OmniLab</h3>
-                       <p className="text-sm text-gray-500 font-mono mt-1">v2.1.0 • {form.developerMode ? 'Forge' : 'Nexus'} Build</p>
+                       <p className="text-sm text-gray-500 font-mono mt-1">v1.0.0 • {form.developerMode ? 'Forge' : 'Nexus'} Build</p>
                     </div>
+
+                    {/* NEW: UPDATE CHECKER SECTION */}
+                    <Section title="Software Update" icon={RefreshCw} theme={localTheme}>
+                       <div className="p-6 rounded-2xl bg-[#0A0A0A] border border-white/10">
+                          <div className="flex items-center justify-between mb-4">
+                             <div>
+                               <div className="text-sm font-bold text-white mb-1">Update Status</div>
+                               <div className="text-xs text-gray-500">
+                                 {updateMessage || "Check for the latest version."}
+                               </div>
+                             </div>
+                             
+                             {/* Status Badges */}
+                             {updateStatus === 'downloading' && (
+                               <span className="text-xs px-2 py-1 rounded bg-blue-500/20 text-blue-400 border border-blue-500/30">Downloading {downloadProgress}%</span>
+                             )}
+                             {updateStatus === 'available' && (
+                               <span className="text-xs px-2 py-1 rounded bg-green-500/20 text-green-400 border border-green-500/30">New Version</span>
+                             )}
+                             {updateStatus === 'not-available' && (
+                               <span className="text-xs px-2 py-1 rounded bg-gray-700/50 text-gray-400">Up to date</span>
+                             )}
+                          </div>
+
+                          {/* Progress Bar */}
+                          {updateStatus === 'downloading' && (
+                            <div className="w-full bg-gray-800 h-1.5 rounded-full mb-4 overflow-hidden">
+                               <div 
+                                 className={`h-full bg-gradient-to-r ${localTheme.gradient}`} 
+                                 style={{ width: `${downloadProgress}%` }}
+                               ></div>
+                            </div>
+                          )}
+
+                          {/* Actions */}
+                          <div className="flex gap-3">
+                             {/* Check Button */}
+                             {updateStatus !== 'downloading' && updateStatus !== 'downloaded' && (
+                               <button 
+                                 onClick={checkForUpdates}
+                                 disabled={updateStatus === 'checking'}
+                                 className={`px-4 py-2 rounded-xl text-xs font-bold transition-all ${updateStatus === 'checking' ? 'bg-white/5 text-gray-500' : 'bg-white/10 hover:bg-white/20 text-white'}`}
+                               >
+                                 {updateStatus === 'checking' ? 'Checking...' : 'Check for Updates'}
+                               </button>
+                             )}
+
+                             {/* Download Button (If available and autoDownload is false) */}
+                             {updateStatus === 'available' && (
+                               <button 
+                                 onClick={startDownload}
+                                 className={`flex items-center gap-2 px-4 py-2 rounded-xl text-xs font-bold text-white bg-gradient-to-r ${localTheme.gradient} shadow-lg`}
+                               >
+                                 <Download size={14} /> Download Update
+                               </button>
+                             )}
+
+                             {/* Restart Button */}
+                             {updateStatus === 'downloaded' && (
+                               <button 
+                                 onClick={installUpdate}
+                                 className="flex items-center gap-2 px-4 py-2 rounded-xl text-xs font-bold text-white bg-green-600 hover:bg-green-500 shadow-lg animate-pulse"
+                               >
+                                 <CheckCircle size={14} /> Restart & Install
+                               </button>
+                             )}
+                          </div>
+                       </div>
+                    </Section>
 
                     <Section title="Community & Support" icon={Github} theme={localTheme}>
                        <div className="grid grid-cols-2 gap-4">
@@ -303,7 +411,7 @@ export const Settings = ({ isOpen, onClose }) => {
         </div>
 
         <div className="p-6 border-t border-white/5 bg-[#020202]/80 backdrop-blur-sm flex justify-between items-center">
-           <div className="text-[10px] text-gray-600 font-mono">v2.1.0-OmniLab</div>
+           <div className="text-[10px] text-gray-600 font-mono">v1.0.0-OmniLab</div>
            <div className="flex gap-3">
              <button onClick={handleClose} className="px-6 py-2.5 text-gray-400 hover:text-white text-xs font-medium transition-colors rounded-xl hover:bg-white/5">{hasChanges ? 'Discard' : 'Close'}</button>
              <button onClick={handleSave} disabled={!hasChanges} className={`px-8 py-2.5 rounded-xl text-xs font-bold text-white shadow-lg transition-all flex items-center gap-2 ${hasChanges ? `bg-gradient-to-r ${localTheme.gradient}` : 'bg-gray-700 opacity-50 cursor-not-allowed'}`}><Save size={14} /> Save Changes</button>

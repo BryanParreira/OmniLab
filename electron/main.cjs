@@ -1,11 +1,15 @@
-if (typeof DOMMatrix === 'undefined') { global.DOMMatrix = class DOMMatrix {}; }
-if (typeof ImageData === 'undefined') { global.ImageData = class ImageData {}; }
-if (typeof Path2D === 'undefined') { global.Path2D = class Path2D {}; }
-
 const { app, BrowserWindow, ipcMain, shell, dialog, net } = require('electron');
 const path = require('path');
 const fs = require('fs');
 const { createTray } = require('./tray.cjs');
+const { autoUpdater } = require("electron-updater");
+const log = require('electron-log');
+
+// --- UPDATE LOGGING CONFIG ---
+log.transports.file.level = 'info';
+autoUpdater.logger = log;
+autoUpdater.autoDownload = false; // We ask the user before downloading
+autoUpdater.autoInstallOnAppQuit = true;
 
 // Lazy load heavy dependencies
 const loadPdf = () => require('pdf-parse');
@@ -69,9 +73,58 @@ function createWindow() {
   return mainWindow;
 }
 
+// --- UPDATER EVENTS ---
+function setupUpdater() {
+  // IPC Handlers for Update Actions
+  ipcMain.on('check-for-updates', () => {
+    if (!app.isPackaged) {
+      mainWindow?.webContents.send('update-message', { status: 'error', text: 'Dev Mode: Updates disabled' });
+      return;
+    }
+    autoUpdater.checkForUpdates();
+  });
+
+  ipcMain.on('download-update', () => {
+    autoUpdater.downloadUpdate();
+  });
+
+  ipcMain.on('quit-and-install', () => {
+    autoUpdater.quitAndInstall();
+  });
+
+  // AutoUpdater Event Listeners
+  autoUpdater.on('checking-for-update', () => {
+    mainWindow?.webContents.send('update-message', { status: 'checking', text: 'Checking for updates...' });
+  });
+
+  autoUpdater.on('update-available', (info) => {
+    mainWindow?.webContents.send('update-message', { status: 'available', text: `Version ${info.version} available!`, version: info.version });
+  });
+
+  autoUpdater.on('update-not-available', () => {
+    mainWindow?.webContents.send('update-message', { status: 'not-available', text: 'You are on the latest version.' });
+  });
+
+  autoUpdater.on('error', (err) => {
+    mainWindow?.webContents.send('update-message', { status: 'error', text: 'Update check failed.' });
+    log.error("Update Error:", err);
+  });
+
+  autoUpdater.on('download-progress', (progressObj) => {
+    mainWindow?.webContents.send('update-message', { 
+      status: 'downloading', 
+      text: 'Downloading update...', 
+      progress: progressObj.percent 
+    });
+  });
+
+  autoUpdater.on('update-downloaded', (info) => {
+    mainWindow?.webContents.send('update-message', { status: 'downloaded', text: 'Ready to install.' });
+  });
+}
+
 // --- SMART FILE ENGINE (UPDATED FOR PDFS) ---
 async function readProjectFiles(projectFiles) {
-  // 1. INCREASED LIMIT: Allows reading much larger projects (approx 128k chars)
   const MAX_CONTEXT_CHARS = 128000; 
   let currentChars = 0;
   
@@ -105,7 +158,6 @@ async function readProjectFiles(projectFiles) {
       if (!fs.existsSync(file.path)) continue;
       const stats = await fs.promises.stat(file.path);
 
-      // 2. INCREASED FILE SIZE LIMIT: 5MB -> 20MB (Crucial for PDFs)
       if (stats.size > 20 * 1024 * 1024) {
         console.warn(`Skipping large file: ${file.name}`);
         continue; 
@@ -128,12 +180,10 @@ async function readProjectFiles(projectFiles) {
       // Standard Text Files
       else if (!['png','jpg','jpeg','gif','exe','bin','zip','iso','dll','dmg'].includes(file.type.toLowerCase())) {
         fileContent = await fs.promises.readFile(file.path, 'utf-8');
-        // Check for binary content
         if (fileContent.indexOf('\0') !== -1) fileContent = "";
       }
 
       if (fileContent) {
-        // Truncate individual files if they are huge text files
         if (fileContent.length > 10000) {
           fileContent = fileContent.slice(0, 10000) + `\n... [File ${file.name} Truncated] ...`;
         }
@@ -178,6 +228,14 @@ const gitHandler = {
 app.whenReady().then(() => {
   const win = createWindow();
   tray = createTray(win); 
+  
+  // Initialize Updater Logic
+  setupUpdater();
+
+  // Check for updates on startup if packaged
+  if (app.isPackaged) {
+    autoUpdater.checkForUpdatesAndNotify();
+  }
 
   // Settings Handlers
   ipcMain.handle('settings:load', async () => {

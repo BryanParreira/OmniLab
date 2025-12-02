@@ -5,27 +5,33 @@ contextBridge.exposeInMainWorld('lumina', {
   checkOllamaStatus: (url) => ipcRenderer.invoke('ollama:status', url),
   getModels: (url) => ipcRenderer.invoke('ollama:models', url),
   
-  // Updated to ensure contextFiles are passed through correctly
   sendPrompt: (prompt, model, contextFiles, systemPrompt, settings, projectId) => 
     ipcRenderer.send('ollama:stream-prompt', { prompt, model, contextFiles, systemPrompt, settings, projectId }),
   
   generateJson: (prompt, model, settings) => ipcRenderer.invoke('ollama:generate-json', { prompt, model, settings }),
   
-  // --- LISTENERS (Crucial for UI updates) ---
+  // --- LISTENERS ---
   onResponseChunk: (cb) => {
     const sub = (_e, data) => cb(data);
     ipcRenderer.on('ollama:chunk', sub);
-    // Return cleanup function to prevent memory leaks
     return () => ipcRenderer.removeListener('ollama:chunk', sub);
   },
-
-  // NEW: Added this so you can see errors if PDF reading fails
   onAIError: (cb) => {
     const sub = (_e, message) => cb(message);
     ipcRenderer.on('ollama:error', sub);
     return () => ipcRenderer.removeListener('ollama:error', sub);
   },
   
+  // --- AUTO UPDATER API (NEW) ---
+  checkForUpdates: () => ipcRenderer.send('check-for-updates'),
+  downloadUpdate: () => ipcRenderer.send('download-update'),
+  quitAndInstall: () => ipcRenderer.send('quit-and-install'),
+  onUpdateMessage: (callback) => {
+    const sub = (_e, value) => callback(value);
+    ipcRenderer.on('update-message', sub);
+    return () => ipcRenderer.removeListener('update-message', sub);
+  },
+
   // --- SYSTEM ---
   loadSettings: () => ipcRenderer.invoke('settings:load'),
   saveSettings: (settings) => ipcRenderer.invoke('settings:save', settings),
@@ -40,8 +46,6 @@ contextBridge.exposeInMainWorld('lumina', {
   addUrlToProject: (id, url) => ipcRenderer.invoke('project:add-url', { projectId: id, url }),
   updateProjectSettings: (id, systemPrompt) => ipcRenderer.invoke('project:update-settings', { id, systemPrompt }),
   deleteProject: (id) => ipcRenderer.invoke('project:delete', id),
-  
-  // The missing function you asked about
   scaffoldProject: (projectId, structure) => ipcRenderer.invoke('project:scaffold', { projectId, structure }),
 
   // --- ADVANCED FEATURES ---
