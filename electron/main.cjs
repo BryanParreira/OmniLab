@@ -11,7 +11,7 @@ autoUpdater.logger = log;
 autoUpdater.autoDownload = false; // We manually trigger download
 autoUpdater.autoInstallOnAppQuit = true;
 
-// --- 2. LAZY LOAD HEAVY DEPENDENCIES ---
+// Lazy Load Heavy Dependencies (Optimizes Startup)
 const loadPdf = () => require('pdf-parse');
 const loadCheerio = () => require('cheerio');
 const loadGit = () => require('simple-git');
@@ -20,7 +20,7 @@ const loadGit = () => require('simple-git');
 let mainWindow;
 let tray = null; 
 
-// --- 3. PATHS & DIRS ---
+// --- 2. PATHS & DIRS ---
 const getUserDataPath = () => app.getPath('userData');
 const getSessionsPath = () => path.join(getUserDataPath(), 'sessions');
 const getProjectsPath = () => path.join(getUserDataPath(), 'projects');
@@ -45,7 +45,7 @@ const DEFAULT_SETTINGS = {
   chatDensity: 'comfortable'
 };
 
-// --- 4. WINDOW CREATION ---
+// --- 3. WINDOW CREATION ---
 function createWindow() {
   mainWindow = new BrowserWindow({
     width: 1200,
@@ -74,7 +74,7 @@ function createWindow() {
   return mainWindow;
 }
 
-// --- 5. UPDATER LOGIC (FIXED) ---
+// --- 4. UPDATER LOGIC (FIXED) ---
 function setupUpdater() {
   ipcMain.on('check-for-updates', () => {
     if (!app.isPackaged) {
@@ -91,10 +91,21 @@ function setupUpdater() {
     });
   });
 
-  ipcMain.on('quit-and-install', () => { autoUpdater.quitAndInstall(); });
+  // FIX: Force restart immediately after quit
+  ipcMain.on('quit-and-install', () => { 
+      autoUpdater.quitAndInstall(false, true); 
+  });
 
   autoUpdater.on('checking-for-update', () => mainWindow?.webContents.send('update-message', { status: 'checking', text: 'Checking...' }));
-  autoUpdater.on('update-available', (info) => mainWindow?.webContents.send('update-message', { status: 'available', text: `Version ${info.version} available!`, version: info.version }));
+  
+  autoUpdater.on('update-available', (info) => {
+      mainWindow?.webContents.send('update-message', { 
+          status: 'available', 
+          text: `Version ${info.version} available!`, 
+          version: info.version 
+      });
+  });
+  
   autoUpdater.on('update-not-available', () => mainWindow?.webContents.send('update-message', { status: 'not-available', text: 'You are on the latest version.' }));
   
   autoUpdater.on('download-progress', (progressObj) => {
@@ -115,7 +126,7 @@ function setupUpdater() {
   });
 }
 
-// --- 6. SMART CONTEXT ENGINE (READS FILES/PDFS) ---
+// --- 5. SMART CONTEXT ENGINE (READS FILES/PDFS) ---
 async function readProjectFiles(projectFiles) {
   const MAX_CONTEXT_CHARS = 128000; 
   let currentChars = 0;
@@ -189,7 +200,7 @@ async function readProjectFiles(projectFiles) {
   return context;
 }
 
-// --- 7. HELPER: RECURSIVE SCAN ---
+// --- 6. HELPER: RECURSIVE SCAN ---
 async function scanDirectory(dirPath, fileList = []) {
   try {
     const files = await fs.promises.readdir(dirPath, { withFileTypes: true });
@@ -209,18 +220,17 @@ async function scanDirectory(dirPath, fileList = []) {
   return fileList;
 }
 
-// --- 8. HELPER: GIT HANDLER ---
+// --- 7. HELPER: GIT HANDLER ---
 const gitHandler = {
   async getStatus(rootPath) { try { if (!rootPath || !fs.existsSync(path.join(rootPath, '.git'))) return null; const git = loadGit()(rootPath); const status = await git.status(); return { current: status.current, modified: status.modified, staged: status.staged, clean: status.isClean() }; } catch (e) { return null; } },
   async getDiff(rootPath) { try { if (!rootPath) return ""; const git = loadGit()(rootPath); let diff = await git.diff(['--staged']); if (!diff) diff = await git.diff(); return diff; } catch (e) { return ""; } }
 };
 
-// --- 9. APP READY ---
+// --- 8. APP READY ---
 app.whenReady().then(() => {
   createWindow();
-  tray = createTray(mainWindow); 
+  if (createTray) tray = createTray(mainWindow); // Optional Tray
   setupUpdater();
-  
   if (app.isPackaged) autoUpdater.checkForUpdatesAndNotify();
 
   // --- HANDLERS: SYSTEM ---
@@ -228,7 +238,7 @@ app.whenReady().then(() => {
   ipcMain.handle('settings:save', async (e, settings) => { await fs.promises.writeFile(getSettingsPath(), JSON.stringify(settings, null, 2)); return true; });
   ipcMain.handle('system:factory-reset', async () => { try { const del = async (d) => { if(fs.existsSync(d)){ for(const f of await fs.promises.readdir(d)){ const c=path.join(d,f); if((await fs.promises.lstat(c)).isDirectory()) await fs.promises.rm(c,{recursive:true}); else await fs.promises.unlink(c); } } }; await del(getSessionsPath()); await del(getProjectsPath()); await fs.promises.writeFile(getSettingsPath(), JSON.stringify(DEFAULT_SETTINGS)); return true; } catch(e){ return false; } });
   
-  // --- HANDLER: ZENITH SAVE (Fixed) ---
+  // --- HANDLER: ZENITH SAVE ---
   ipcMain.handle('system:save-file', async (e, { content, filename }) => {
     const { filePath } = await dialog.showSaveDialog(mainWindow, {
       defaultPath: filename || 'zenith-draft.md',
@@ -373,7 +383,7 @@ app.whenReady().then(() => {
     try {
         const r = await fetch(`${baseUrl}/api/generate`, { 
             method:'POST', 
-            body:JSON.stringify({ model:selectedModel, prompt, format:'json', stream:false }) 
+            body:JSON.stringify({ model:selectedModel, prompt: prompt + "\n\nRETURN ONLY RAW JSON.", format:'json', stream:false }) 
         });
         const j = await r.json();
         

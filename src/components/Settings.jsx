@@ -107,7 +107,6 @@ export const Settings = ({ isOpen, onClose }) => {
   useEffect(() => {
     if (window.lumina && window.lumina.onUpdateMessage) {
       const cleanup = window.lumina.onUpdateMessage((data) => {
-        // Only update if we get real data to avoid flickering
         if(data.status) setUpdateStatus(data.status);
         if(data.text) setUpdateMessage(data.text);
         if (data.progress) setDownloadProgress(Math.floor(data.progress));
@@ -174,7 +173,7 @@ export const Settings = ({ isOpen, onClose }) => {
 
   const installUpdate = () => {
     if (window.lumina && window.lumina.quitAndInstall) {
-      window.lumina.quitAndInstall();
+      window.lumina.quitAndInstall(); // Triggers IPC call to restart app
     }
   };
 
@@ -305,6 +304,7 @@ export const Settings = ({ isOpen, onClose }) => {
 
                     <Section title="Software Update" icon={RefreshCw} theme={localTheme}>
                        <div className="p-6 rounded-2xl bg-[#0A0A0A] border border-white/10 relative overflow-hidden">
+                          
                           {/* Progress Bar Background */}
                           {updateStatus === 'downloading' && (
                             <div className={`absolute bottom-0 left-0 h-1 bg-gradient-to-r ${localTheme.gradient} transition-all duration-300`} style={{ width: `${downloadProgress}%` }}></div>
