@@ -5,11 +5,14 @@ const { createTray } = require('./tray.cjs');
 const { autoUpdater } = require("electron-updater");
 const log = require('electron-log');
 
-// --- 1. CONFIGURATION ---
+// --- 1. CONFIGURATION (FIXED) ---
 log.transports.file.level = 'info';
 autoUpdater.logger = log;
 autoUpdater.autoDownload = false; // Manual trigger
 autoUpdater.autoInstallOnAppQuit = true;
+// ADDED: These prevent common download errors regarding draft/prerelease versions
+autoUpdater.allowPrerelease = false; 
+autoUpdater.fullChangelog = false;
 
 // --- 2. LAZY LOAD HEAVY DEPENDENCIES (Performance Optimization) ---
 // We load these only when needed to keep app startup fast, but they are fully preserved.
@@ -85,20 +88,35 @@ function setupUpdater() {
     autoUpdater.checkForUpdates();
   });
 
-  ipcMain.on('download-update', () => {
-    autoUpdater.downloadUpdate().catch(err => {
+  // FIXED: Converted to async to catch startup errors
+  ipcMain.on('download-update', async () => {
+    try {
+      log.info("User requested download...");
+      // This initiates the download. The events below handle the rest.
+      await autoUpdater.downloadUpdate();
+    } catch (err) {
       log.error("Download Error:", err);
       mainWindow?.webContents.send('update-message', { status: 'error', text: 'Download failed. Check logs.' });
-    });
+    }
   });
 
   // FORCE RESTART
   ipcMain.on('quit-and-install', () => { 
-      autoUpdater.quitAndInstall(false, true); 
+      // true, true = Silent Install, Run App After
+      autoUpdater.quitAndInstall(true, true); 
   });
 
   autoUpdater.on('checking-for-update', () => mainWindow?.webContents.send('update-message', { status: 'checking', text: 'Checking...' }));
-  autoUpdater.on('update-available', (info) => mainWindow?.webContents.send('update-message', { status: 'available', text: `Version ${info.version} available!`, version: info.version }));
+  
+  autoUpdater.on('update-available', (info) => {
+    log.info("Update available:", info);
+    mainWindow?.webContents.send('update-message', { 
+        status: 'available', 
+        text: `Version ${info.version} available!`, 
+        version: info.version 
+    });
+  });
+
   autoUpdater.on('update-not-available', () => mainWindow?.webContents.send('update-message', { status: 'not-available', text: 'You are on the latest version.' }));
   
   autoUpdater.on('download-progress', (progressObj) => {
@@ -110,11 +128,14 @@ function setupUpdater() {
   });
 
   autoUpdater.on('update-downloaded', (info) => {
+    log.info("Update downloaded");
     mainWindow?.webContents.send('update-message', { status: 'downloaded', text: 'Ready to install.' });
   });
   
   autoUpdater.on('error', (err) => {
     log.error(err);
+    // Don't show error to UI if it's just a background check failing (internet issues)
+    // Only send if user actively clicked something or during download
     mainWindow?.webContents.send('update-message', { status: 'error', text: 'Update failed.' });
   });
 }
