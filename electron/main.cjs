@@ -5,16 +5,17 @@ const { createTray } = require('./tray.cjs');
 const { autoUpdater } = require("electron-updater");
 const log = require('electron-log');
 
-// --- 1. PRODUCTION LOGGING & CONFIGURATION ---
+// --- 1. CONFIGURATION ---
 log.transports.file.level = 'info';
 autoUpdater.logger = log;
-autoUpdater.autoDownload = false; // User must click "Download"
+autoUpdater.autoDownload = false; // Manual trigger (User must click download)
 autoUpdater.autoInstallOnAppQuit = true;
-autoUpdater.allowPrerelease = false; // STABILITY: Only allow full releases
+// STABILITY: Prevent downloading beta/broken versions in production
+autoUpdater.allowPrerelease = false; 
 autoUpdater.fullChangelog = false;
 
 // --- 2. LAZY LOAD DEPENDENCIES ---
-// This ensures the app opens instantly, loading heavy tools only when clicked.
+// Performance: Only load these when the user actually uses the feature
 const loadPdf = () => require('pdf-parse');
 const loadCheerio = () => require('cheerio');
 const loadGit = () => require('simple-git');
@@ -31,7 +32,7 @@ const getCachePath = () => path.join(getProjectsPath(), 'cache');
 const getSettingsPath = () => path.join(getUserDataPath(), 'settings.json');
 const getCalendarPath = () => path.join(getUserDataPath(), 'calendar.json');
 
-// Ensure directories exist immediately
+// Ensure directories exist
 [getSessionsPath(), getProjectsPath(), getCachePath()].forEach(dir => {
   if (!fs.existsSync(dir)) fs.mkdirSync(dir, { recursive: true });
 });
@@ -56,7 +57,7 @@ function createWindow() {
     backgroundColor: '#030304',
     show: false,
     titleBarStyle: 'hiddenInset',
-    vibrancy: 'ultra-dark', // MacOS
+    vibrancy: 'ultra-dark', // MacOS only
     visualEffectState: 'active',
     webPreferences: {
       preload: path.join(__dirname, 'preload.cjs'),
@@ -69,7 +70,6 @@ function createWindow() {
   if (process.env.NODE_ENV === 'development') {
     mainWindow.loadURL("http://localhost:5173/");
   } else {
-    // PRODUCTION LOAD
     mainWindow.loadFile(path.join(__dirname, "../dist/index.html"));
   }
   
@@ -78,17 +78,18 @@ function createWindow() {
   return mainWindow;
 }
 
-// --- 5. UPDATER LOGIC (PRODUCTION SAFE) ---
+// --- 5. UPDATER LOGIC (PRODUCTION READY & DEBUGGABLE) ---
 function setupUpdater() {
   ipcMain.on('check-for-updates', () => {
-    // GUARD: If running locally, tell UI to disable button state
+    // 1. DEV MODE GUARD: Instantly return "Disabled" status so UI doesn't crash/error
     if (!app.isPackaged) {
       mainWindow?.webContents.send('update-message', { 
-        status: 'not-available', 
-        text: 'Updates disabled in Developer Mode' 
+          status: 'not-available', 
+          text: 'Updater disabled in Developer Mode' 
       });
       return;
     }
+    // 2. PRODUCTION: Actually check GitHub
     autoUpdater.checkForUpdates();
   });
 
@@ -106,6 +107,7 @@ function setupUpdater() {
       autoUpdater.quitAndInstall(true, true); 
   });
 
+  // Events
   autoUpdater.on('checking-for-update', () => mainWindow?.webContents.send('update-message', { status: 'checking', text: 'Checking for updates...' }));
   
   autoUpdater.on('update-available', (info) => {
@@ -128,16 +130,26 @@ function setupUpdater() {
   });
 
   autoUpdater.on('update-downloaded', (info) => {
-    mainWindow?.webContents.send('update-message', { status: 'downloaded', text: 'Ready to install. Restart now.' });
+    mainWindow?.webContents.send('update-message', { status: 'downloaded', text: 'Update ready. Click to restart.' });
   });
   
+  // [CRITICAL FIX] BETTER ERROR HANDLING
   autoUpdater.on('error', (err) => {
-    log.error(err);
-    // GUARD: Hide errors in Dev Mode
+    log.error("Updater Error:", err);
+    
+    // If in Dev Mode, suppress the error visually
     if (!app.isPackaged) {
-        mainWindow?.webContents.send('update-message', { status: 'not-available', text: 'Dev Mode: Updater Disabled' });
+        mainWindow?.webContents.send('update-message', { 
+            status: 'not-available', 
+            text: 'Dev Mode: Updater Disabled' 
+        });
     } else {
-        mainWindow?.webContents.send('update-message', { status: 'error', text: 'Update check failed.' });
+        // IN PRODUCTION: Send the ACTUAL error message to the UI
+        // This lets you see if it's a "Network Error", "404", or "Signature" issue.
+        mainWindow?.webContents.send('update-message', { 
+            status: 'error', 
+            text: `Update Error: ${err.message || "Unknown error"}` 
+        });
     }
   });
 }
@@ -209,7 +221,6 @@ async function readProjectFiles(projectFiles) {
         }
       }
     } catch (e) { 
-      // Silently fail on bad files to keep app running
       console.warn(`Read Error: ${file.name}`, e); 
     }
   }
@@ -248,8 +259,7 @@ app.whenReady().then(() => {
   tray = createTray(mainWindow); 
   setupUpdater();
   
-  // GLOBAL SHORTCUT: Toggle Window (Spotlight Style)
-  // We use a try/catch to ensure it doesn't crash if the shortcut is taken
+  // GLOBAL SHORTCUT: Toggle Window
   try {
     globalShortcut.register('Alt+Space', () => {
       if (mainWindow.isVisible()) {
@@ -262,7 +272,6 @@ app.whenReady().then(() => {
     });
   } catch (e) { console.warn("Could not register Alt+Space"); }
   
-  // ONLY check for updates automatically if we are in Production
   if (app.isPackaged) autoUpdater.checkForUpdatesAndNotify();
 
   // ==========================================
@@ -274,7 +283,7 @@ app.whenReady().then(() => {
   ipcMain.handle('settings:save', async (e, settings) => { await fs.promises.writeFile(getSettingsPath(), JSON.stringify(settings, null, 2)); return true; });
   ipcMain.handle('system:factory-reset', async () => { try { const del = async (d) => { if(fs.existsSync(d)){ for(const f of await fs.promises.readdir(d)){ const c=path.join(d,f); if((await fs.promises.lstat(c)).isDirectory()) await fs.promises.rm(c,{recursive:true}); else await fs.promises.unlink(c); } } }; await del(getSessionsPath()); await del(getProjectsPath()); await fs.promises.writeFile(getSettingsPath(), JSON.stringify(DEFAULT_SETTINGS)); return true; } catch(e){ return false; } });
   
-  // --- NATIVE FILE SAVE (Zenith) ---
+  // --- ZENITH FILE SAVE ---
   ipcMain.handle('system:save-file', async (e, { content, filename }) => {
     const { filePath } = await dialog.showSaveDialog(mainWindow, {
       defaultPath: filename || 'zenith-draft.md',
@@ -404,7 +413,7 @@ app.whenReady().then(() => {
     req.end();
   });
 
-  // --- OLLAMA JSON GENERATION (Flashcards/Dossier) ---
+  // --- OLLAMA JSON GENERATION ---
   ipcMain.handle('ollama:generate-json', async (e, { prompt, model, settings, projectId }) => { 
     const config = settings || DEFAULT_SETTINGS; 
     let baseUrl = (config.ollamaUrl || "http://127.0.0.1:11434").replace(/\/$/, '').replace('localhost', '127.0.0.1');
@@ -436,7 +445,7 @@ app.whenReady().then(() => {
     }
   });
 
-  // --- OLLAMA TEXT COMPLETION (Ghost Writer) ---
+  // --- OLLAMA TEXT COMPLETION (Zenith Ghost Writer) ---
   ipcMain.handle('ollama:completion', async (e, { prompt, model, settings }) => { 
     const config = settings || DEFAULT_SETTINGS; 
     let baseUrl = (config.ollamaUrl || "http://127.0.0.1:11434").replace(/\/$/, '').replace('localhost', '127.0.0.1');
@@ -449,9 +458,9 @@ app.whenReady().then(() => {
             method:'POST', 
             body:JSON.stringify({ 
                 model: selectedModel, 
-                prompt: prompt, // No formatting, just raw prompt
+                prompt: prompt, 
                 stream: false,
-                options: { stop: ['.', '\n', '  '], temperature: 0.3 } // Quick stop for autocomplete
+                options: { stop: ['.', '\n', '  '], temperature: 0.3 } 
             }) 
         });
         const j = await r.json();
@@ -468,7 +477,7 @@ app.whenReady().then(() => {
 
   app.on("activate", () => { if (BrowserWindow.getAllWindows().length === 0) createWindow(); });
   
-  // CLEANUP
+  // Cleanup global shortcuts
   app.on('will-quit', () => {
     globalShortcut.unregisterAll();
   });
