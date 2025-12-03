@@ -5,16 +5,16 @@ const { createTray } = require('./tray.cjs');
 const { autoUpdater } = require("electron-updater");
 const log = require('electron-log');
 
-// --- 1. CONFIGURATION ---
+// --- 1. PRODUCTION LOGGING & CONFIGURATION ---
 log.transports.file.level = 'info';
 autoUpdater.logger = log;
-autoUpdater.autoDownload = false; // Manual trigger
+autoUpdater.autoDownload = false; // User must click "Download"
 autoUpdater.autoInstallOnAppQuit = true;
-// ADDED: These prevent common download errors regarding draft/prerelease versions
-autoUpdater.allowPrerelease = false; 
+autoUpdater.allowPrerelease = false; // STABILITY: Only allow full releases
 autoUpdater.fullChangelog = false;
 
-// --- 2. LAZY LOAD HEAVY DEPENDENCIES (Performance Optimization) ---
+// --- 2. LAZY LOAD DEPENDENCIES ---
+// This ensures the app opens instantly, loading heavy tools only when clicked.
 const loadPdf = () => require('pdf-parse');
 const loadCheerio = () => require('cheerio');
 const loadGit = () => require('simple-git');
@@ -31,7 +31,7 @@ const getCachePath = () => path.join(getProjectsPath(), 'cache');
 const getSettingsPath = () => path.join(getUserDataPath(), 'settings.json');
 const getCalendarPath = () => path.join(getUserDataPath(), 'calendar.json');
 
-// Ensure directories exist
+// Ensure directories exist immediately
 [getSessionsPath(), getProjectsPath(), getCachePath()].forEach(dir => {
   if (!fs.existsSync(dir)) fs.mkdirSync(dir, { recursive: true });
 });
@@ -56,7 +56,7 @@ function createWindow() {
     backgroundColor: '#030304',
     show: false,
     titleBarStyle: 'hiddenInset',
-    vibrancy: 'ultra-dark', // MacOS only
+    vibrancy: 'ultra-dark', // MacOS
     visualEffectState: 'active',
     webPreferences: {
       preload: path.join(__dirname, 'preload.cjs'),
@@ -69,6 +69,7 @@ function createWindow() {
   if (process.env.NODE_ENV === 'development') {
     mainWindow.loadURL("http://localhost:5173/");
   } else {
+    // PRODUCTION LOAD
     mainWindow.loadFile(path.join(__dirname, "../dist/index.html"));
   }
   
@@ -77,11 +78,15 @@ function createWindow() {
   return mainWindow;
 }
 
-// --- 5. UPDATER LOGIC ---
+// --- 5. UPDATER LOGIC (PRODUCTION SAFE) ---
 function setupUpdater() {
   ipcMain.on('check-for-updates', () => {
+    // GUARD: If running locally, tell UI to disable button state
     if (!app.isPackaged) {
-      mainWindow?.webContents.send('update-message', { status: 'error', text: 'Updates disabled in Dev Mode' });
+      mainWindow?.webContents.send('update-message', { 
+        status: 'not-available', 
+        text: 'Updates disabled in Developer Mode' 
+      });
       return;
     }
     autoUpdater.checkForUpdates();
@@ -93,23 +98,21 @@ function setupUpdater() {
       await autoUpdater.downloadUpdate();
     } catch (err) {
       log.error("Download Error:", err);
-      mainWindow?.webContents.send('update-message', { status: 'error', text: 'Download failed. Check logs.' });
+      mainWindow?.webContents.send('update-message', { status: 'error', text: 'Download failed. Check internet.' });
     }
   });
 
-  // FORCE RESTART
   ipcMain.on('quit-and-install', () => { 
-      // true, true = Silent Install, Run App After
       autoUpdater.quitAndInstall(true, true); 
   });
 
-  autoUpdater.on('checking-for-update', () => mainWindow?.webContents.send('update-message', { status: 'checking', text: 'Checking...' }));
+  autoUpdater.on('checking-for-update', () => mainWindow?.webContents.send('update-message', { status: 'checking', text: 'Checking for updates...' }));
   
   autoUpdater.on('update-available', (info) => {
     log.info("Update available:", info);
     mainWindow?.webContents.send('update-message', { 
         status: 'available', 
-        text: `Version ${info.version} available!`, 
+        text: `Version ${info.version} is available!`, 
         version: info.version 
     });
   });
@@ -119,19 +122,23 @@ function setupUpdater() {
   autoUpdater.on('download-progress', (progressObj) => {
     mainWindow?.webContents.send('update-message', { 
       status: 'downloading', 
-      text: 'Downloading update...', 
+      text: `Downloading... ${Math.round(progressObj.percent)}%`, 
       progress: progressObj.percent 
     });
   });
 
   autoUpdater.on('update-downloaded', (info) => {
-    log.info("Update downloaded");
-    mainWindow?.webContents.send('update-message', { status: 'downloaded', text: 'Ready to install.' });
+    mainWindow?.webContents.send('update-message', { status: 'downloaded', text: 'Ready to install. Restart now.' });
   });
   
   autoUpdater.on('error', (err) => {
     log.error(err);
-    mainWindow?.webContents.send('update-message', { status: 'error', text: 'Update failed.' });
+    // GUARD: Hide errors in Dev Mode
+    if (!app.isPackaged) {
+        mainWindow?.webContents.send('update-message', { status: 'not-available', text: 'Dev Mode: Updater Disabled' });
+    } else {
+        mainWindow?.webContents.send('update-message', { status: 'error', text: 'Update check failed.' });
+    }
   });
 }
 
@@ -152,7 +159,7 @@ async function readProjectFiles(projectFiles) {
     }
 
     try {
-      // A. Handle Web URLs (Cached from Deep Research)
+      // A. Web URLs
       if (file.type === 'url') {
         const filePath = path.join(getCachePath(), file.cacheFile);
         if (fs.existsSync(filePath)) {
@@ -170,26 +177,24 @@ async function readProjectFiles(projectFiles) {
       // B. Validation
       if (!fs.existsSync(file.path)) continue;
       const stats = await fs.promises.stat(file.path);
-      if (stats.size > 20 * 1024 * 1024) continue; // Skip huge files (>20MB)
+      if (stats.size > 20 * 1024 * 1024) continue; 
       
       let fileContent = "";
       
-      // C. PDF PARSING (Heavy Logic)
+      // C. PDF Parsing
       if (file.path.toLowerCase().endsWith('.pdf')) {
         try {
-          const pdf = loadPdf(); // Loaded on demand
+          const pdf = loadPdf(); 
           const dataBuffer = await fs.promises.readFile(file.path);
           const data = await pdf(dataBuffer);
           fileContent = data.text;
         } catch (pdfErr) {
-          console.error(`Failed to parse PDF ${file.name}:`, pdfErr);
           fileContent = "[ERROR: Could not parse PDF text.]";
         }
       } 
-      // D. STANDARD TEXT (Code, MD, TXT)
+      // D. Text Parsing
       else if (!['png','jpg','jpeg','gif','exe','bin','zip','iso','dll','dmg'].includes(file.type.toLowerCase())) {
         fileContent = await fs.promises.readFile(file.path, 'utf-8');
-        // Simple binary check (prevents reading executables as text)
         if (fileContent.indexOf('\0') !== -1) fileContent = ""; 
       }
 
@@ -204,7 +209,8 @@ async function readProjectFiles(projectFiles) {
         }
       }
     } catch (e) { 
-      console.warn(`Could not read file ${file.name}:`, e); 
+      // Silently fail on bad files to keep app running
+      console.warn(`Read Error: ${file.name}`, e); 
     }
   }
   return context;
@@ -230,7 +236,7 @@ async function scanDirectory(dirPath, fileList = []) {
   return fileList;
 }
 
-// --- 8. HELPER: GIT HANDLER (Heavy Logic) ---
+// --- 8. HELPER: GIT HANDLER ---
 const gitHandler = {
   async getStatus(rootPath) { try { if (!rootPath || !fs.existsSync(path.join(rootPath, '.git'))) return null; const git = loadGit()(rootPath); const status = await git.status(); return { current: status.current, modified: status.modified, staged: status.staged, clean: status.isClean() }; } catch (e) { return null; } },
   async getDiff(rootPath) { try { if (!rootPath) return ""; const git = loadGit()(rootPath); let diff = await git.diff(['--staged']); if (!diff) diff = await git.diff(); return diff; } catch (e) { return ""; } }
@@ -242,17 +248,21 @@ app.whenReady().then(() => {
   tray = createTray(mainWindow); 
   setupUpdater();
   
-  // [NEW] GLOBAL SHORTCUT FOR COMMAND BAR
-  globalShortcut.register('Alt+Space', () => {
-    if (mainWindow.isVisible()) {
-        mainWindow.hide();
-    } else {
-        mainWindow.show();
-        mainWindow.focus();
-        mainWindow.webContents.send('cmd-bar:toggle');
-    }
-  });
+  // GLOBAL SHORTCUT: Toggle Window (Spotlight Style)
+  // We use a try/catch to ensure it doesn't crash if the shortcut is taken
+  try {
+    globalShortcut.register('Alt+Space', () => {
+      if (mainWindow.isVisible()) {
+          mainWindow.hide();
+      } else {
+          mainWindow.show();
+          mainWindow.focus();
+          mainWindow.webContents.send('cmd-bar:toggle');
+      }
+    });
+  } catch (e) { console.warn("Could not register Alt+Space"); }
   
+  // ONLY check for updates automatically if we are in Production
   if (app.isPackaged) autoUpdater.checkForUpdatesAndNotify();
 
   // ==========================================
@@ -264,7 +274,7 @@ app.whenReady().then(() => {
   ipcMain.handle('settings:save', async (e, settings) => { await fs.promises.writeFile(getSettingsPath(), JSON.stringify(settings, null, 2)); return true; });
   ipcMain.handle('system:factory-reset', async () => { try { const del = async (d) => { if(fs.existsSync(d)){ for(const f of await fs.promises.readdir(d)){ const c=path.join(d,f); if((await fs.promises.lstat(c)).isDirectory()) await fs.promises.rm(c,{recursive:true}); else await fs.promises.unlink(c); } } }; await del(getSessionsPath()); await del(getProjectsPath()); await fs.promises.writeFile(getSettingsPath(), JSON.stringify(DEFAULT_SETTINGS)); return true; } catch(e){ return false; } });
   
-  // --- [UPDATED] ZENITH SAVE (Native Dialog) ---
+  // --- NATIVE FILE SAVE (Zenith) ---
   ipcMain.handle('system:save-file', async (e, { content, filename }) => {
     const { filePath } = await dialog.showSaveDialog(mainWindow, {
       defaultPath: filename || 'zenith-draft.md',
@@ -290,7 +300,7 @@ app.whenReady().then(() => {
   ipcMain.handle('project:add-files', async (e, projectId) => { const r = await dialog.showOpenDialog(mainWindow, { properties: ['openFile', 'multiSelections'] }); if (!r.canceled) { const p = path.join(getProjectsPath(), `${projectId}.json`); const d = JSON.parse(await fs.promises.readFile(p, 'utf-8')); const n = r.filePaths.map(x => ({ path: x, name: path.basename(x), type: path.extname(x).substring(1) })); d.files.push(...n.filter(f => !d.files.some(ex => ex.path === f.path))); await fs.promises.writeFile(p, JSON.stringify(d, null, 2)); return d.files; } return null; });
   ipcMain.handle('project:add-folder', async (e, projectId) => { const r = await dialog.showOpenDialog(mainWindow, { properties: ['openDirectory'] }); if (!r.canceled && r.filePaths.length > 0) { const folderPath = r.filePaths[0]; const allFiles = await scanDirectory(folderPath); const p = path.join(getProjectsPath(), `${projectId}.json`); const d = JSON.parse(await fs.promises.readFile(p, 'utf-8')); const newFiles = allFiles.filter(f => !d.files.some(existing => existing.path === f.path)); d.files.push(...newFiles); d.rootPath = folderPath; await fs.promises.writeFile(p, JSON.stringify(d, null, 2)); return d.files; } return null; });
 
-  // --- DEEP RESEARCH (Web Scraping using Cheerio) ---
+  // --- DEEP RESEARCH ---
   ipcMain.handle('project:add-url', async (e, { projectId, url }) => { 
       try { 
           const cheerio = loadCheerio(); 
@@ -321,7 +331,7 @@ app.whenReady().then(() => {
       } catch (e) { throw new Error("Research Failed"); } 
   });
 
-  // --- SCAFFOLDING (Blueprints) ---
+  // --- SCAFFOLDING ---
   ipcMain.handle('project:scaffold', async (e, { projectId, structure }) => {
     const p = path.join(getProjectsPath(), `${projectId}.json`);
     if (!fs.existsSync(p)) throw new Error("Project not found");
@@ -349,37 +359,20 @@ app.whenReady().then(() => {
   ipcMain.handle('session:rename', async (e, { id, title }) => { const p = path.join(getSessionsPath(), `${id}.json`); if(fs.existsSync(p)){ const c = JSON.parse(await fs.promises.readFile(p,'utf-8')); c.title = title; await fs.promises.writeFile(p, JSON.stringify(c,null,2)); return true; } return false; });
   ipcMain.handle('calendar:load', async () => { try { if (fs.existsSync(getCalendarPath())) return JSON.parse(await fs.promises.readFile(getCalendarPath(), 'utf-8')); return []; } catch (e) { return []; } });
   ipcMain.handle('calendar:save', async (e, events) => { try { await fs.promises.writeFile(getCalendarPath(), JSON.stringify(events, null, 2)); return true; } catch (e) { return false; } });
-
-  // --- DOSSIER SAVE ---
-  ipcMain.handle('project:save-dossier', async (e, { id, dossier }) => {
-    const p = path.join(getProjectsPath(), `${id}.json`);
-    if (fs.existsSync(p)) {
-      const d = JSON.parse(await fs.promises.readFile(p, 'utf-8'));
-      d.dossier = dossier;
-      await fs.promises.writeFile(p, JSON.stringify(d, null, 2));
-      return d;
-    }
-    return null;
-  });
+  ipcMain.handle('project:save-dossier', async (e, { id, dossier }) => { const p = path.join(getProjectsPath(), `${id}.json`); if (fs.existsSync(p)) { const d = JSON.parse(await fs.promises.readFile(p, 'utf-8')); d.dossier = dossier; await fs.promises.writeFile(p, JSON.stringify(d, null, 2)); return d; } return null; });
 
   // --- GRAPH & GIT ---
   ipcMain.handle('project:generate-graph', async (e, projectId) => { const p = path.join(getProjectsPath(), `${projectId}.json`); if (!fs.existsSync(p)) return { nodes: [], links: [] }; const d = JSON.parse(await fs.promises.readFile(p, 'utf-8')); const nodes = []; d.files.forEach((file) => nodes.push({ id: file.name, group: file.type, path: file.path })); return { nodes, links: [] }; });
   ipcMain.handle('git:status', async (e, projectId) => { const p = path.join(getProjectsPath(), `${projectId}.json`); if (!fs.existsSync(p)) return null; const d = JSON.parse(await fs.promises.readFile(p, 'utf-8')); return d.rootPath ? await gitHandler.getStatus(d.rootPath) : null; });
   ipcMain.handle('git:diff', async (e, projectId) => { const p = path.join(getProjectsPath(), `${projectId}.json`); const d = JSON.parse(await fs.promises.readFile(p, 'utf-8')); return d.rootPath ? await gitHandler.getDiff(d.rootPath) : ""; });
 
-  // --- OLLAMA STREAMING (Standard Chat) ---
+  // --- OLLAMA STREAMING (Chat) ---
   ipcMain.on('ollama:stream-prompt', async (event, { prompt, model, contextFiles, systemPrompt, settings }) => {
     const config = settings || DEFAULT_SETTINGS;
     let baseUrl = (config.ollamaUrl || "http://127.0.0.1:11434").replace(/\/$/, '').replace('localhost', '127.0.0.1');
     let selectedModel = model || config.defaultModel;
 
-    if(!selectedModel) {
-        try {
-            const r = await fetch(`${baseUrl}/api/tags`);
-            const d = await r.json();
-            if(d.models?.length) selectedModel = d.models[0].name;
-        } catch(e) { mainWindow.webContents.send('ollama:error', "No AI models found."); return; }
-    }
+    if(!selectedModel) { try { const r = await fetch(`${baseUrl}/api/tags`); const d = await r.json(); if(d.models?.length) selectedModel = d.models[0].name; } catch(e) { mainWindow.webContents.send('ollama:error', "No AI models found."); return; } }
 
     const contextStr = await readProjectFiles(contextFiles || []);
     const fullPrompt = contextStr ? `[CONTEXT START]\n${contextStr}\n[CONTEXT END]\n\nQUESTION: ${prompt}` : prompt;
@@ -411,14 +404,13 @@ app.whenReady().then(() => {
     req.end();
   });
 
-  // --- OLLAMA JSON GENERATION (Flashcards & Dossier) ---
+  // --- OLLAMA JSON GENERATION (Flashcards/Dossier) ---
   ipcMain.handle('ollama:generate-json', async (e, { prompt, model, settings, projectId }) => { 
     const config = settings || DEFAULT_SETTINGS; 
     let baseUrl = (config.ollamaUrl || "http://127.0.0.1:11434").replace(/\/$/, '').replace('localhost', '127.0.0.1');
     let selectedModel = model || config.defaultModel;
     if(!selectedModel) { try { const r = await fetch(`${baseUrl}/api/tags`); const d = await r.json(); if(d.models?.length) selectedModel = d.models[0].name; } catch(e){} }
     
-    // READ FILES IF PROJECT ID PROVIDED (For Dossier)
     let contextStr = "";
     if (projectId) {
         const p = path.join(getProjectsPath(), `${projectId}.json`);
@@ -427,7 +419,6 @@ app.whenReady().then(() => {
             contextStr = await readProjectFiles(d.files || []);
         }
     }
-
     const fullPrompt = contextStr ? `CONTEXT:\n${contextStr}\n\nTASK: ${prompt}` : prompt;
 
     try {
@@ -436,21 +427,16 @@ app.whenReady().then(() => {
             body:JSON.stringify({ model:selectedModel, prompt: fullPrompt + "\n\nRETURN ONLY RAW JSON.", format:'json', stream:false }) 
         });
         const j = await r.json();
-        
-        // CLEANUP MARKDOWN WRAPPERS
         let raw = j.response.trim();
         if (raw.startsWith('```json')) raw = raw.replace(/^```json\s*/, '').replace(/\s*```$/, '');
         else if (raw.startsWith('```')) raw = raw.replace(/^```\s*/, '').replace(/\s*```$/, '');
-        
         return JSON.parse(raw);
     } catch(err) {
-        console.error("JSON Error", err);
         return { error: "Failed to parse JSON" };
     }
   });
 
-  // --- [NEW] OLLAMA COMPLETION (Ghost Writer) ---
-  // This logic is separate to allow raw text return without JSON enforcement
+  // --- OLLAMA TEXT COMPLETION (Ghost Writer) ---
   ipcMain.handle('ollama:completion', async (e, { prompt, model, settings }) => { 
     const config = settings || DEFAULT_SETTINGS; 
     let baseUrl = (config.ollamaUrl || "http://127.0.0.1:11434").replace(/\/$/, '').replace('localhost', '127.0.0.1');
@@ -481,6 +467,11 @@ app.whenReady().then(() => {
   ipcMain.handle('ollama:models', async (e, url) => { try { const r = await fetch(`${url}/api/tags`); const d = await r.json(); return d.models.map(m=>m.name); } catch(e){ return []; } });
 
   app.on("activate", () => { if (BrowserWindow.getAllWindows().length === 0) createWindow(); });
+  
+  // CLEANUP
+  app.on('will-quit', () => {
+    globalShortcut.unregisterAll();
+  });
 });
 
 app.on("window-all-closed", () => { if (process.platform !== "darwin") app.quit(); });
