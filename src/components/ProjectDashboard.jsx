@@ -3,7 +3,7 @@ import { useLumina } from '../context/LuminaContext';
 import { 
   Folder, File, Globe, GitBranch, FolderPlus, Hash, 
   Layout, MoreVertical, Trash, FileCode, Copy, ArrowRight,
-  GitCommit, CheckCircle2, Sparkles, BrainCircuit, Tag
+  GitCommit, CheckCircle2, Sparkles, BrainCircuit, Tag, ExternalLink
 } from 'lucide-react';
 import clsx from 'clsx';
 import { motion, AnimatePresence } from 'framer-motion';
@@ -93,7 +93,8 @@ const FileItem = React.memo(({ file, index, theme, onOpen, onDelete }) => {
             >
                 <div className="p-1">
                     <button onClick={(e) => handleAction(e, 'open')} className="w-full text-left flex items-center gap-2 px-3 py-2 text-xs text-gray-300 hover:bg-white/10 rounded-lg transition-colors">
-                        <FileCode size={12} /> Open File
+                        {file.type === 'url' ? <ExternalLink size={12} /> : <FileCode size={12} />} 
+                        {file.type === 'url' ? 'Open in Browser' : 'Open File'}
                     </button>
                     <button onClick={(e) => handleAction(e, 'copy')} className="w-full text-left flex items-center gap-2 px-3 py-2 text-xs text-gray-300 hover:bg-white/10 rounded-lg transition-colors">
                         <Copy size={12} /> Copy Path

@@ -6,9 +6,10 @@ import { Cerebro } from "./components/Cerebro";
 import { ProjectDashboard } from "./components/ProjectDashboard";
 import { Chronos } from "./components/Chronos";
 import { Canvas } from "./components/Canvas";
-import { Zenith } from "./components/Zenith"; // Kept Zenith
+import { Zenith } from "./components/Zenith";
 import { Settings } from "./components/Settings";
-// Removed OmniBar import
+import { CommandPalette } from "./components/CommandPalette"; // NEW
+import { DailyDashboard } from "./components/DailyDashboard"; // NEW
 import { LuminaProvider, useLumina } from "./context/LuminaContext";
 
 const MainContent = () => {
@@ -16,9 +17,13 @@ const MainContent = () => {
   
   let content;
   switch (currentView) {
+    case 'home':
+      content = <DailyDashboard />; // NEW: Daily Dashboard
+      break;
     case 'cerebro': 
       content = <Cerebro />; 
       break;
+    case 'dashboard':
     case 'project-dashboard': 
       content = <ProjectDashboard />; 
       break;
@@ -48,7 +53,7 @@ const MainContent = () => {
 };
 
 const AppContent = () => {
-  const { isSettingsOpen, closeGlobalSettings } = useLumina();
+  const { isSettingsOpen, closeGlobalSettings, commandPaletteOpen, setCommandPaletteOpen } = useLumina();
   
   return (
     <>
@@ -67,6 +72,12 @@ const AppContent = () => {
       
       {/* Global Settings Modal */}
       <Settings isOpen={isSettingsOpen} onClose={closeGlobalSettings} />
+      
+      {/* NEW: Command Palette (Cmd+K) */}
+      <CommandPalette 
+        isOpen={commandPaletteOpen} 
+        onClose={() => setCommandPaletteOpen(false)} 
+      />
     </>
   );
 };

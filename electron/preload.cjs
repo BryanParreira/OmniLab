@@ -48,10 +48,18 @@ contextBridge.exposeInMainWorld('lumina', {
   saveSettings: (settings) => ipcRenderer.invoke('settings:save', settings),
   resetSystem: () => ipcRenderer.invoke('system:factory-reset'),
   
-  // [NEW] File System Operations for Zenith/Sidebar
+  // --- NEW: SPECIFIC DATA DELETION HANDLERS ---
+  deleteChats: () => ipcRenderer.invoke('system:delete-chats'),
+  deleteCache: () => ipcRenderer.invoke('system:delete-cache'),
+  deleteCalendar: () => ipcRenderer.invoke('system:delete-calendar'),
+  
+  // File System Operations for Zenith/Sidebar
   listFiles: (directory) => ipcRenderer.invoke('system:list-files', directory),
   readFile: (filename) => ipcRenderer.invoke('system:read-file', filename),
   saveGeneratedFile: (content, filename) => ipcRenderer.invoke('system:save-file', { content, filename }),
+  
+  // --- NEW: OPEN FILE IN SYSTEM DEFAULT APP ---
+  openFile: (filePath) => ipcRenderer.invoke('system:open-file', filePath),
   
   // Command Bar Listener (Alt+Space)
   onToggleCommandBar: (cb) => {
@@ -72,6 +80,9 @@ contextBridge.exposeInMainWorld('lumina', {
   deleteProject: (id) => ipcRenderer.invoke('project:delete', id),
   scaffoldProject: (projectId, structure) => ipcRenderer.invoke('project:scaffold', { projectId, structure }),
   saveProjectDossier: (id, dossier) => ipcRenderer.invoke('project:save-dossier', { id, dossier }),
+  
+  // --- NEW: DELETE FILE FROM PROJECT ---
+  deleteFileFromProject: (projectId, filePath) => ipcRenderer.invoke('project:delete-file', { projectId, filePath }),
 
   // ==========================================
   // 5. ADVANCED AGENTS (Graph, Research, Git)

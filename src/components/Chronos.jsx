@@ -20,7 +20,11 @@ import {
   AlignLeft,
   ArrowLeft,
   GripHorizontal,
-  BellRing
+  BellRing,
+  Mic,
+  MicOff,
+  Volume2,
+  Upload
 } from 'lucide-react';
 import { motion, AnimatePresence } from 'framer-motion';
 
@@ -173,6 +177,97 @@ const generateICS = (events) => {
   window.URL.revokeObjectURL(url);
 };
 
+// --- NEW: IMPORT ICS FILE ---
+const parseICS = (icsContent) => {
+  const events = [];
+  const eventBlocks = icsContent.split('BEGIN:VEVENT');
+  
+  for (let i = 1; i < eventBlocks.length; i++) {
+    const block = eventBlocks[i];
+    const summaryMatch = block.match(/SUMMARY:(.*)/);
+    const dateMatch = block.match(/DTSTART[^:]*:(\d{8})/);
+    const descMatch = block.match(/DESCRIPTION:(.*)/);
+    
+    if (summaryMatch && dateMatch) {
+      const dateStr = dateMatch[1];
+      const year = dateStr.substring(0, 4);
+      const month = dateStr.substring(4, 6);
+      const day = dateStr.substring(6, 8);
+      
+      events.push({
+        title: summaryMatch[1].trim(),
+        date: `${year}-${month}-${day}`,
+        type: 'study',
+        priority: 'medium',
+        notes: descMatch ? descMatch[1].trim() : '',
+        time: ''
+      });
+    }
+  }
+  
+  return events;
+};
+
+// --- VOICE RECOGNITION SETUP ---
+const useVoiceRecognition = (onResult) => {
+  const [isListening, setIsListening] = useState(false);
+  const [recognition, setRecognition] = useState(null);
+
+  useEffect(() => {
+    if (typeof window !== 'undefined' && ('webkitSpeechRecognition' in window || 'SpeechRecognition' in window)) {
+      const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition;
+      const recognitionInstance = new SpeechRecognition();
+      recognitionInstance.continuous = false;
+      recognitionInstance.interimResults = false;
+      recognitionInstance.lang = 'en-US';
+
+      recognitionInstance.onresult = (event) => {
+        const transcript = event.results[0][0].transcript;
+        if (onResult) onResult(transcript);
+        setIsListening(false);
+      };
+
+      recognitionInstance.onerror = () => {
+        setIsListening(false);
+      };
+
+      recognitionInstance.onend = () => {
+        setIsListening(false);
+      };
+
+      setRecognition(recognitionInstance);
+    }
+  }, [onResult]);
+
+  const startListening = useCallback(() => {
+    if (recognition) {
+      setIsListening(true);
+      recognition.start();
+    }
+  }, [recognition]);
+
+  const stopListening = useCallback(() => {
+    if (recognition) {
+      recognition.stop();
+      setIsListening(false);
+    }
+  }, [recognition]);
+
+  return { isListening, startListening, stopListening, isSupported: !!recognition };
+};
+
+// --- TEXT-TO-SPEECH HELPER ---
+const speakText = (text) => {
+  if ('speechSynthesis' in window) {
+    window.speechSynthesis.cancel(); // Stop any ongoing speech
+    const utterance = new SpeechSynthesisUtterance(text);
+    utterance.rate = 1.0;
+    utterance.pitch = 1.0;
+    utterance.volume = 1.0;
+    window.speechSynthesis.speak(utterance);
+  }
+};
+
 // --- DRAGGABLE EVENT ---
 const DraggableEvent = ({ event, onClick, theme }) => {
     return (
@@ -321,7 +416,7 @@ const WeekView = React.memo(({ currentDate, eventsByDate, theme, onEventClick })
   );
 });
 
-const EventModal = React.memo(({ isOpen, isPlanning, isEditing, onClose, onAdd, onUpdate, onDelete, onGenerate, settings, theme, isLoading, ...props }) => {
+const EventModal = React.memo(({ isOpen, isPlanning, isEditing, onClose, onAdd, onUpdate, onDelete, onGenerate, settings, theme, isLoading, voiceHandler, ...props }) => {
     const [isEditingState, setIsEditingState] = useState(false);
 
     useEffect(() => {
@@ -352,6 +447,14 @@ const EventModal = React.memo(({ isOpen, isPlanning, isEditing, onClose, onAdd, 
                 <>
                     <div className={`p-8 relative overflow-hidden ${theme.softBg} border-b ${theme.primaryBorder}`}>
                         <div className="absolute top-4 right-4 flex gap-2">
+                             {/* Voice Read Button */}
+                             <button 
+                               onClick={() => speakText(`${props.newEventTitle}. ${formatFriendlyDate(props.newEventDate)}${props.newEventTime ? ` at ${props.newEventTime}` : ''}. ${props.newEventNotes || 'No additional notes'}`)} 
+                               className="p-2 bg-black/20 hover:bg-black/40 text-white rounded-lg backdrop-blur-sm transition-colors" 
+                               title="Read aloud"
+                             >
+                               <Volume2 size={16} />
+                             </button>
                              <button onClick={() => setIsEditingState(true)} className="p-2 bg-black/20 hover:bg-black/40 text-white rounded-lg backdrop-blur-sm transition-colors" title="Edit"><Edit3 size={16} /></button>
                              <button onClick={onClose} className="p-2 bg-black/20 hover:bg-black/40 text-white rounded-lg backdrop-blur-sm transition-colors" title="Close"><X size={16} /></button>
                         </div>
@@ -444,7 +547,19 @@ const EventModal = React.memo(({ isOpen, isPlanning, isEditing, onClose, onAdd, 
                             </div>
                         </div>
                         <div>
-                            <label className="text-xs font-bold text-gray-400 mb-2">Title</label>
+                            <label className="text-xs font-bold text-gray-400 mb-2 flex items-center justify-between">
+                              <span>Title</span>
+                              {voiceHandler?.isSupported && (
+                                <button
+                                  type="button"
+                                  onClick={voiceHandler.isListening ? voiceHandler.stopListening : voiceHandler.startListening}
+                                  className={`p-1 rounded ${voiceHandler.isListening ? 'bg-red-500/20 text-red-400' : 'bg-white/5 text-gray-400 hover:text-white'}`}
+                                  title={voiceHandler.isListening ? "Stop listening" : "Voice input"}
+                                >
+                                  {voiceHandler.isListening ? <MicOff size={12} /> : <Mic size={12} />}
+                                </button>
+                              )}
+                            </label>
                             <input value={props.newEventTitle} onChange={(e) => props.setNewEventTitle(e.target.value)} className="w-full bg-black/50 border border-white/10 rounded-xl p-3 text-sm text-white focus:outline-none focus:border-white/30" placeholder="Event name..." />
                         </div>
                         <div className="grid grid-cols-2 gap-4">
@@ -515,6 +630,16 @@ export const Chronos = React.memo(() => {
   const [planDuration, setPlanDuration] = useState("");
   const [planGoals, setPlanGoals] = useState("");
 
+  // --- VOICE RECOGNITION SETUP ---
+  const handleVoiceResult = useCallback((transcript) => {
+    const parsed = parseNaturalLanguage(transcript);
+    setNewEventTitle(parsed.title);
+    setNewEventDate(parsed.date);
+    if (parsed.time) setNewEventTime(parsed.time);
+  }, []);
+
+  const voiceHandler = useVoiceRecognition(handleVoiceResult);
+
   const daysInMonth = new Date(currentDate.getFullYear(), currentDate.getMonth() + 1, 0).getDate();
   const firstDayOfMonth = new Date(currentDate.getFullYear(), currentDate.getMonth(), 1).getDay();
 
@@ -567,12 +692,12 @@ export const Chronos = React.memo(() => {
       }
   };
 
+  // --- REMOVED CONFIRMATION FROM DRAG AND DROP ---
   const handleDropEvent = (eventId, targetDate) => {
       const event = calendarEvents.find(e => e.id === eventId);
       if (event && updateEvent) {
-          if (window.confirm(`Reschedule "${event.title}" to ${targetDate}?`)) {
-              updateEvent(eventId, { ...event, date: targetDate });
-          }
+          updateEvent(eventId, { ...event, date: targetDate });
+          showNotification(`"${event.title}" rescheduled to ${formatFriendlyDate(targetDate)}`);
       }
   };
 
@@ -640,6 +765,32 @@ export const Chronos = React.memo(() => {
     }
   };
 
+  // --- NEW: IMPORT ICS FILE HANDLER ---
+  const handleImportICS = () => {
+    const input = document.createElement('input');
+    input.type = 'file';
+    input.accept = '.ics';
+    input.onchange = (e) => {
+      const file = e.target.files[0];
+      if (file) {
+        const reader = new FileReader();
+        reader.onload = (event) => {
+          const icsContent = event.target.result;
+          const importedEvents = parseICS(icsContent);
+          
+          // Add all imported events
+          importedEvents.forEach(evt => {
+            addEvent(evt.title, evt.date, evt.type, evt.priority, evt.notes, evt.time);
+          });
+          
+          showNotification(`Imported ${importedEvents.length} event(s) from calendar`);
+        };
+        reader.readAsText(file);
+      }
+    };
+    input.click();
+  };
+
   const closeModal = () => {
     setIsModalOpen(false); setIsPlanning(false); setEditingEvent(null);
     setNewEventTitle(""); setNewEventDate(""); setNewEventTime(""); setPlanTopic(""); setPlanDate(""); setNewEventNotes("");
@@ -679,7 +830,7 @@ export const Chronos = React.memo(() => {
             )}
         </AnimatePresence>
 
-        {/* --- NATURAL LANGUAGE INPUT --- */}
+        {/* --- NATURAL LANGUAGE INPUT WITH VOICE --- */}
         <div className="mb-6 relative group z-20">
             <div className="absolute inset-y-0 left-3 flex items-center pointer-events-none text-gray-500 group-focus-within:text-blue-400 transition-colors">
                 <Sparkles size={16} className={naturalInput ? "animate-pulse text-blue-400" : ""} />
@@ -690,9 +841,24 @@ export const Chronos = React.memo(() => {
                 onChange={(e) => setNaturalInput(e.target.value)}
                 onKeyDown={handleNaturalSubmit}
                 placeholder="Ask Chronos: 'Plan sprint for Physics', 'Meeting on Friday', or 'Call Mom at 5pm'..."
-                className="w-full bg-[#0A0A0A] border border-white/10 rounded-xl py-3 pl-10 pr-4 text-sm text-white focus:outline-none focus:border-blue-500/50 transition-all shadow-inner placeholder-gray-600"
+                className="w-full bg-[#0A0A0A] border border-white/10 rounded-xl py-3 pl-10 pr-24 text-sm text-white focus:outline-none focus:border-blue-500/50 transition-all shadow-inner placeholder-gray-600"
             />
-            <div className="absolute right-3 top-3 text-[10px] text-gray-600 border border-white/5 px-1.5 rounded opacity-50 group-focus-within:opacity-100 transition-opacity">ENTER</div>
+            <div className="absolute right-3 top-1/2 -translate-y-1/2 flex items-center gap-2">
+              {voiceHandler.isSupported && (
+                <button
+                  onClick={voiceHandler.isListening ? voiceHandler.stopListening : voiceHandler.startListening}
+                  className={`p-1.5 rounded-lg transition-all ${
+                    voiceHandler.isListening 
+                      ? 'bg-red-500/20 text-red-400 animate-pulse' 
+                      : 'bg-white/5 text-gray-500 hover:text-white hover:bg-white/10'
+                  }`}
+                  title={voiceHandler.isListening ? "Stop listening" : "Voice input"}
+                >
+                  {voiceHandler.isListening ? <MicOff size={14} /> : <Mic size={14} />}
+                </button>
+              )}
+              <div className="text-[10px] text-gray-600 border border-white/5 px-1.5 rounded opacity-50 group-focus-within:opacity-100 transition-opacity">ENTER</div>
+            </div>
         </div>
 
         {/* Header */}
@@ -713,6 +879,7 @@ export const Chronos = React.memo(() => {
                 <button onClick={() => setViewMode('month')} className={`px-3 py-1 rounded-md text-xs font-medium transition-all flex items-center gap-2 ${viewMode === 'month' ? 'bg-white/10 text-white' : 'text-gray-500'}`}><Grid size={12}/> Month</button>
                 <button onClick={() => setViewMode('week')} className={`px-3 py-1 rounded-md text-xs font-medium transition-all flex items-center gap-2 ${viewMode === 'week' ? 'bg-white/10 text-white' : 'text-gray-500'}`}><Layout size={12}/> Week</button>
             </div>
+            <button onClick={handleImportICS} className="p-2 bg-[#111] border border-white/10 rounded-lg text-gray-400 hover:text-white" title="Import Calendar (.ics)"><Upload size={14}/></button>
             <button onClick={() => generateICS(calendarEvents)} className="p-2 bg-[#111] border border-white/10 rounded-lg text-gray-400 hover:text-white" title="Export ICS"><Download size={14}/></button>
             
             <button onClick={() => openNewEvent(formatDate(new Date()))} className="flex items-center gap-2 px-3 py-1.5 bg-white text-black hover:bg-gray-200 rounded-lg text-xs font-bold">
@@ -774,6 +941,7 @@ export const Chronos = React.memo(() => {
         settings={settings}
         theme={theme}
         isLoading={isLoading}
+        voiceHandler={voiceHandler}
         newEventTitle={newEventTitle} setNewEventTitle={setNewEventTitle}
         newEventDate={newEventDate} setNewEventDate={setNewEventDate}
         newEventType={newEventType} setNewEventType={setNewEventType}

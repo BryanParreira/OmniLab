@@ -3,12 +3,12 @@ import { useLumina } from '../context/LuminaContext';
 import { 
   PenTool, Sparkles, Maximize, Minimize, Save, 
   AlignLeft, Clock, AlertTriangle, Brain,
-  Wand2, Scissors, CheckCircle2
+  Wand2, Scissors, CheckCircle2, FolderPlus, ArrowRight
 } from 'lucide-react';
 import { motion, AnimatePresence } from 'framer-motion';
 
 export const Zenith = () => {
-  const { theme, settings, updateSettings } = useLumina();
+  const { theme, settings, updateSettings, activeProject, addCanvasNode } = useLumina();
   
   // --- STATE MANAGEMENT ---
   const [content, setContent] = useState("");
@@ -28,6 +28,9 @@ export const Zenith = () => {
   // Selection / Lens State
   const [selection, setSelection] = useState({ start: 0, end: 0, text: "" });
   const [showLens, setShowLens] = useState(false);
+  
+  // Save state
+  const [saveStatus, setSaveStatus] = useState('saved'); // 'saved', 'saving', 'unsaved'
 
   const textareaRef = useRef(null);
   const isMounted = useRef(true);
@@ -50,6 +53,7 @@ export const Zenith = () => {
                 // Simple title extraction
                 setTitle(filename.replace(/\.(md|txt)$/, '').replace(/_/g, ' '));
                 setGhostText("");
+                setSaveStatus('saved');
             }
         } catch (err) {
             console.error("Failed to read file:", err);
@@ -63,6 +67,7 @@ export const Zenith = () => {
             setTitle("");
             setActiveFilename(null);
             setGhostText("");
+            setSaveStatus('saved');
             textareaRef.current?.focus();
         }
     };
@@ -75,6 +80,13 @@ export const Zenith = () => {
         window.removeEventListener('zenith-new-file', handleNewFile);
     };
   }, []);
+
+  // --- AUTO-SAVE INDICATOR ---
+  useEffect(() => {
+    if (content && saveStatus === 'saved') {
+      setSaveStatus('unsaved');
+    }
+  }, [content]);
 
   // --- STATS ENGINE & AUTO-RESIZE ---
   useEffect(() => {
@@ -208,6 +220,7 @@ export const Zenith = () => {
   // 3. NATIVE FILE SAVE
   const handleSave = async () => {
     if (!content.trim()) return;
+    setSaveStatus('saving');
 
     let filenameToSave = activeFilename;
 
@@ -230,10 +243,71 @@ export const Zenith = () => {
     try {
         await window.lumina.saveGeneratedFile(content, filenameToSave);
         setActiveFilename(filenameToSave);
+        setSaveStatus('saved');
         // Dispatch event to tell Sidebar to refresh the file list
         window.dispatchEvent(new CustomEvent('zenith-file-saved'));
     } catch (e) {
         console.error("Save failed", e);
+        setSaveStatus('unsaved');
+    }
+  };
+
+  // 4. NEW: SAVE TO PROJECT
+  const saveToProject = async () => {
+    if (!activeProject) {
+      alert('⚠️ Please select a project first from the sidebar');
+      return;
+    }
+    
+    if (!content.trim()) {
+      alert('⚠️ Document is empty');
+      return;
+    }
+
+    setSaveStatus('saving');
+
+    try {
+      // Generate filename
+      let baseFilename = title || content.split('\n')[0].slice(0, 20) || "document";
+      const safeFilename = baseFilename
+        .replace(/[^a-z0-9\-_ ]/gi, '')
+        .trim()
+        .replace(/\s+/g, '_') + '.md';
+
+      // Save to file system first
+      await window.lumina.saveGeneratedFile(content, safeFilename);
+      
+      // Add to project files if method exists
+      if (window.lumina.addFileToProject) {
+        try {
+          await window.lumina.addFileToProject(activeProject.id, safeFilename);
+          
+          // Refresh project files
+          window.dispatchEvent(new CustomEvent('project-files-updated'));
+          
+          alert(`✅ Document saved to project: ${activeProject.name}`);
+        } catch (err) {
+          console.warn('Could not add to project files:', err);
+          alert(`⚠️ File saved but not added to project.\nAdd this method to your backend:\nwindow.lumina.addFileToProject`);
+        }
+      } else {
+        alert(`⚠️ File saved but backend method missing.\n\nTo complete this feature, add:\nwindow.lumina.addFileToProject(projectId, filename)\n\nSee COMPLETE_GUIDE.md for details.`);
+      }
+      
+      // Optional: Create a Canvas node if addCanvasNode exists
+      if (addCanvasNode && window.confirm('📊 Also create a Canvas node for this document?')) {
+        addCanvasNode('note', 500, 500, {
+          title: title || 'Zenith Document',
+          content: content.slice(0, 200) + (content.length > 200 ? '...' : '')
+        });
+      }
+
+      setSaveStatus('saved');
+      setActiveFilename(safeFilename);
+    } catch (e) {
+      console.error("Save to project failed:", e);
+      setSaveStatus('unsaved');
+      alert(`❌ Failed to save: ${e.message}`);
     }
   };
 
@@ -280,17 +354,18 @@ export const Zenith = () => {
             </div>
             <div className="flex flex-col">
                 <span className="text-xs font-bold text-white uppercase tracking-widest">Zenith</span>
-                <span className="text-[10px] text-gray-500">Nexus Mode</span>
+                <span className="text-[10px] text-gray-500">
+                  {activeProject ? `Project: ${activeProject.name}` : 'Nexus Mode'}
+                </span>
             </div>
         </div>
 
-        <div className="flex items-center gap-6">
-            <div className="flex items-center gap-4 text-[10px] font-mono text-gray-500 bg-black/40 px-4 py-2 rounded-full border border-white/5">
-                <span className="flex items-center gap-2"><AlignLeft size={12}/> {stats.words} words</span>
+        <div className="flex items-center gap-4">
+            {/* Stats */}
+            <div className="flex items-center gap-3 text-[10px] font-mono text-gray-500">
+                <span className="flex items-center gap-1.5"><AlignLeft size={12}/> {stats.words} words</span>
                 <span className="w-px h-3 bg-white/10"></span>
-                <span className="flex items-center gap-2"><Clock size={12}/> {stats.readTime}m read</span>
-                <span className="w-px h-3 bg-white/10"></span>
-                <span className={`flex items-center gap-2 ${
+                <span className={`flex items-center gap-1.5 ${
                     stats.complexity === 'Academic' ? 'text-purple-400' : 
                     stats.complexity === 'Simple' ? 'text-green-400' : 'text-blue-400'
                 }`}>
@@ -298,20 +373,44 @@ export const Zenith = () => {
                 </span>
             </div>
 
-            <button 
-                onClick={handleSave}
-                className={`px-4 py-1.5 rounded-lg text-xs font-bold text-white ${theme.primaryBg || 'bg-blue-600'} shadow-lg hover:brightness-110 transition-all flex items-center gap-2`}
-            >
-                <Save size={14} /> Save
-            </button>
+            {/* Save Status Indicator */}
+            <div className="flex items-center gap-2 text-[10px] font-mono">
+              {saveStatus === 'saving' ? (
+                <><Sparkles size={12} className="animate-spin text-blue-400" /> <span className="text-gray-400">Saving...</span></>
+              ) : saveStatus === 'saved' ? (
+                <><CheckCircle2 size={12} className="text-green-400" /> <span className="text-gray-600">Saved</span></>
+              ) : (
+                <span className="text-amber-400">Unsaved</span>
+              )}
+            </div>
 
-            <button 
-                onClick={() => setIsFocusMode(!isFocusMode)}
-                className="p-2 hover:bg-white/10 rounded-lg text-gray-400 hover:text-white"
-                title="Toggle Focus Mode"
-            >
-                {isFocusMode ? <Minimize size={16} /> : <Maximize size={16} />}
-            </button>
+            {/* Action Buttons */}
+            <div className="flex items-center gap-2">
+              <button 
+                  onClick={handleSave}
+                  className={`px-3 py-1.5 rounded-lg text-xs font-bold transition-all flex items-center gap-1.5 ${theme.primaryBg} text-white hover:brightness-110`}
+              >
+                  <Save size={12} /> Save
+              </button>
+
+              {/* NEW: Save to Project Button */}
+              {activeProject && (
+                <button 
+                    onClick={saveToProject}
+                    className="px-3 py-1.5 rounded-lg bg-white/10 hover:bg-white/20 border border-white/10 text-xs font-bold text-white transition-all flex items-center gap-1.5"
+                >
+                    <FolderPlus size={12} /> To Project
+                </button>
+              )}
+
+              <button 
+                  onClick={() => setIsFocusMode(!isFocusMode)}
+                  className="p-1.5 hover:bg-white/10 rounded-lg text-gray-400 hover:text-white transition-colors"
+                  title="Toggle Focus Mode"
+              >
+                  {isFocusMode ? <Minimize size={14} /> : <Maximize size={14} />}
+              </button>
+            </div>
         </div>
       </motion.div>
 

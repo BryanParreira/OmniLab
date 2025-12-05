@@ -3,7 +3,7 @@ import { useLumina } from '../context/LuminaContext.jsx';
 import { 
   Plus, MessageSquare, Trash2, Folder, Settings as SettingsIcon, 
   Sliders, Edit2, Check, Calendar, X, Brain, Layout, PenTool,
-  Clock, AlertCircle
+  Clock, AlertCircle, Home
 } from 'lucide-react';
 import { motion, AnimatePresence } from 'framer-motion';
 
@@ -33,11 +33,11 @@ export const Sidebar = () => {
   const { 
     sessions, sessionId, loadSession, startNewChat, deleteSession, renameChat, openGlobalSettings,
     projects, activeProject, setActiveProject, createProject, deleteProject, updateProjectSettings,
-    setCurrentView, theme, settings,
-    calendarEvents // <--- Now using calendar events
+    setCurrentView, currentView, theme, settings,
+    calendarEvents
   } = useLumina();
 
-  const [activeTab, setActiveTab] = useState('chats'); 
+  const [activeTab, setActiveTab] = useState('home'); // Changed default to 'home'
   
   // State for Lists
   const [isCreatingProj, setIsCreatingProj] = useState(false);
@@ -52,7 +52,6 @@ export const Sidebar = () => {
   const todaysEvents = useMemo(() => {
     if (!calendarEvents) return [];
     
-    // Get local date string YYYY-MM-DD
     const now = new Date();
     const year = now.getFullYear();
     const month = String(now.getMonth() + 1).padStart(2, '0');
@@ -64,22 +63,42 @@ export const Sidebar = () => {
       .sort((a, b) => (a.time || '23:59').localeCompare(b.time || '23:59'));
   }, [calendarEvents]);
 
+  // --- STATS FOR HOME TAB ---
+  const stats = useMemo(() => {
+    const activeProjects = projects.filter(p => p.files?.length > 0).length;
+    const recentChats = sessions.filter(s => {
+      const sessionDate = new Date(s.date);
+      const threeDaysAgo = new Date(Date.now() - 3 * 24 * 60 * 60 * 1000);
+      return sessionDate >= threeDaysAgo;
+    }).length;
+
+    return {
+      todayEvents: todaysEvents.length,
+      activeProjects,
+      recentChats,
+      totalProjects: projects.length
+    };
+  }, [projects, sessions, todaysEvents]);
+
   // --- TAB SWITCHER LOGIC ---
   const switchTab = useCallback((tab) => {
     setActiveTab(tab);
     
-    if (tab === 'calendar') {
+    if (tab === 'home') {
+      setCurrentView('home');
+    } else if (tab === 'calendar') {
       setCurrentView('chronos');
     } else if (tab === 'canvas') {
       setCurrentView('canvas');
     } else if (tab === 'zenith') {
       setCurrentView('zenith');
     } else if (tab === 'projects') {
-      if (settings.developerMode) setCurrentView('project-dashboard');
+      // When clicking projects tab, just show the projects list in sidebar
+      // User can click on a project to open dashboard
     } else if (tab === 'chats') {
       setCurrentView('chat');
     }
-  }, [setCurrentView, settings.developerMode]);
+  }, [setCurrentView]);
 
   // --- ACTIONS ---
   const handleCreateProject = useCallback(async () => {
@@ -103,9 +122,8 @@ export const Sidebar = () => {
 
   const handleProjectClick = useCallback((proj) => {
     setActiveProject(proj);
-    if (settings.developerMode) setCurrentView('project-dashboard');
-    else setCurrentView('chat');
-  }, [setActiveProject, setCurrentView, settings.developerMode]);
+    setCurrentView('dashboard'); // Always go to dashboard for both modes
+  }, [setActiveProject, setCurrentView]);
 
   const handleChatClick = useCallback((id) => { loadSession(id); setCurrentView('chat'); }, [loadSession, setCurrentView]);
   const handleNewChat = useCallback(() => { startNewChat(); setCurrentView('chat'); }, [startNewChat, setCurrentView]);
@@ -124,8 +142,10 @@ export const Sidebar = () => {
           <span className="font-bold text-xs tracking-widest text-white/90 uppercase">OmniLab</span>
         </div>
         
-        {/* --- HORIZONTAL CONTROL DECK --- */}
+        {/* --- HORIZONTAL CONTROL DECK WITH HOME --- */}
         <div className="flex items-center p-1 bg-black/40 rounded-xl border border-white/5 mb-4 gap-1">
+          <TabButton icon={Home} active={activeTab === 'home'} onClick={() => switchTab('home')} title="Dashboard" />
+          <div className="w-px h-4 bg-white/10 mx-1"></div>
           <TabButton icon={MessageSquare} active={activeTab === 'chats'} onClick={() => switchTab('chats')} title="Chats" />
           <TabButton icon={Folder} active={activeTab === 'projects'} onClick={() => switchTab('projects')} title="Contexts" />
           <div className="w-px h-4 bg-white/10 mx-1"></div>
@@ -138,6 +158,32 @@ export const Sidebar = () => {
       {/* --- LIST CONTENT AREA --- */}
       <div className="flex-1 overflow-y-auto custom-scrollbar px-3 pb-2">
         
+        {/* HOME/DASHBOARD - MINIMAL VIEW */}
+        {activeTab === 'home' && (
+          <div className="space-y-4 animate-in fade-in slide-in-from-top-2">
+            <div className="grid grid-cols-2 gap-3">
+              <div className="p-3 rounded-lg bg-white/5 border border-white/10">
+                <div className="text-2xl font-bold text-white mb-1">{stats.todayEvents}</div>
+                <div className="text-[9px] text-gray-500 uppercase tracking-wider">Today</div>
+              </div>
+              <div className="p-3 rounded-lg bg-white/5 border border-white/10">
+                <div className="text-2xl font-bold text-white mb-1">{stats.activeProjects}</div>
+                <div className="text-[9px] text-gray-500 uppercase tracking-wider">Projects</div>
+              </div>
+            </div>
+
+            <div className="flex flex-col items-center justify-center py-8 text-center opacity-60">
+              <Brain size={32} className="text-gray-600 mb-3" />
+              <p className="text-[10px] text-gray-500 font-medium mb-2">Command Center Active</p>
+              <p className="text-[9px] text-gray-700">View full dashboard in main area</p>
+            </div>
+
+            <div className="p-3 rounded-lg bg-gradient-to-br from-indigo-500/10 to-purple-500/10 border border-indigo-500/20 text-center">
+              <div className="text-[9px] text-gray-400 mb-1">Press <kbd className="px-1 py-0.5 bg-white/10 rounded text-indigo-300 text-[8px] font-mono">⌘K</kbd> to search</div>
+            </div>
+          </div>
+        )}
+
         {/* CHATS LIST */}
         {activeTab === 'chats' && (
           <>

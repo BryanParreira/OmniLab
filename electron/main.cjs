@@ -281,6 +281,52 @@ app.whenReady().then(() => {
   ipcMain.handle('settings:save', async (e, settings) => { await fs.promises.writeFile(getSettingsPath(), JSON.stringify(settings, null, 2)); return true; });
   ipcMain.handle('system:factory-reset', async () => { try { const del = async (d) => { if(fs.existsSync(d)){ for(const f of await fs.promises.readdir(d)){ const c=path.join(d,f); if((await fs.promises.lstat(c)).isDirectory()) await fs.promises.rm(c,{recursive:true}); else await fs.promises.unlink(c); } } }; await del(getSessionsPath()); await del(getProjectsPath()); await fs.promises.writeFile(getSettingsPath(), JSON.stringify(DEFAULT_SETTINGS)); return true; } catch(e){ return false; } });
   
+  // --- NEW: SPECIFIC DATA DELETION HANDLERS ---
+  ipcMain.handle('system:delete-chats', async () => { 
+    try { 
+      const sessionsPath = getSessionsPath();
+      if(fs.existsSync(sessionsPath)){ 
+        const files = await fs.promises.readdir(sessionsPath);
+        for(const f of files){ 
+          if(f.endsWith('.json')) await fs.promises.unlink(path.join(sessionsPath, f)); 
+        }
+      }
+      return true; 
+    } catch(e){ 
+      console.error('Delete chats error:', e);
+      return false; 
+    } 
+  });
+
+  ipcMain.handle('system:delete-cache', async () => { 
+    try { 
+      const cachePath = getCachePath();
+      if(fs.existsSync(cachePath)){ 
+        const files = await fs.promises.readdir(cachePath);
+        for(const f of files){ 
+          await fs.promises.unlink(path.join(cachePath, f)); 
+        }
+      }
+      return true; 
+    } catch(e){ 
+      console.error('Delete cache error:', e);
+      return false; 
+    } 
+  });
+
+  ipcMain.handle('system:delete-calendar', async () => { 
+    try { 
+      const calendarPath = getCalendarPath();
+      if(fs.existsSync(calendarPath)){ 
+        await fs.promises.unlink(calendarPath);
+      }
+      return true; 
+    } catch(e){ 
+      console.error('Delete calendar error:', e);
+      return false; 
+    } 
+  });
+  
   // --- ZENITH FILE SAVE ---
   ipcMain.handle('system:save-file', async (e, { content, filename }) => {
     const { filePath } = await dialog.showSaveDialog(mainWindow, {
@@ -298,11 +344,52 @@ app.whenReady().then(() => {
     return false;
   });
 
+  // --- NEW: OPEN FILE IN SYSTEM DEFAULT APP ---
+  ipcMain.handle('system:open-file', async (e, filePath) => {
+    try {
+      if (!fs.existsSync(filePath)) {
+        return { success: false, error: 'File not found' };
+      }
+      await shell.openPath(filePath);
+      return { success: true };
+    } catch (error) {
+      console.error('Error opening file:', error);
+      return { success: false, error: error.message };
+    }
+  });
+
   // --- PROJECT MANAGEMENT ---
   ipcMain.handle('project:list', async () => { const d = getProjectsPath(); const f = await fs.promises.readdir(d); const p = []; for (const x of f) { if(x.endsWith('.json')) p.push(JSON.parse(await fs.promises.readFile(path.join(d, x), 'utf-8'))); } return p; });
-  ipcMain.handle('project:create', async (e, { id, name }) => { const p = path.join(getProjectsPath(), `${id}.json`); const n = { id, name, files: [], systemPrompt: "", createdAt: new Date() }; await fs.promises.writeFile(p, JSON.stringify(n, null, 2)); return n; });
+  
+  // --- UPDATED: PROJECT CREATE WITH CHARACTER LIMIT (100 chars) ---
+  ipcMain.handle('project:create', async (e, { id, name }) => { 
+    // Limit project name to 100 characters
+    const limitedName = name.substring(0, 100);
+    const p = path.join(getProjectsPath(), `${id}.json`); 
+    const n = { id, name: limitedName, files: [], systemPrompt: "", createdAt: new Date() }; 
+    await fs.promises.writeFile(p, JSON.stringify(n, null, 2)); 
+    return n; 
+  });
+  
   ipcMain.handle('project:delete', async (e, id) => { await fs.promises.unlink(path.join(getProjectsPath(), `${id}.json`)); return true; });
   ipcMain.handle('project:update-settings', async (e, { id, systemPrompt }) => { const p = path.join(getProjectsPath(), `${id}.json`); if (fs.existsSync(p)) { const d = JSON.parse(await fs.promises.readFile(p, 'utf-8')); d.systemPrompt = systemPrompt; await fs.promises.writeFile(p, JSON.stringify(d, null, 2)); return d; } return null; });
+  
+  // --- NEW: DELETE FILE FROM PROJECT ---
+  ipcMain.handle('project:delete-file', async (e, { projectId, filePath }) => {
+    try {
+      const p = path.join(getProjectsPath(), `${projectId}.json`);
+      if (fs.existsSync(p)) {
+        const d = JSON.parse(await fs.promises.readFile(p, 'utf-8'));
+        d.files = d.files.filter(f => f.path !== filePath);
+        await fs.promises.writeFile(p, JSON.stringify(d, null, 2));
+        return { success: true, files: d.files };
+      }
+      return { success: false, error: 'Project not found' };
+    } catch (error) {
+      console.error('Error deleting file from project:', error);
+      return { success: false, error: error.message };
+    }
+  });
   
   ipcMain.handle('project:add-files', async (e, projectId) => { const r = await dialog.showOpenDialog(mainWindow, { properties: ['openFile', 'multiSelections'] }); if (!r.canceled) { const p = path.join(getProjectsPath(), `${projectId}.json`); const d = JSON.parse(await fs.promises.readFile(p, 'utf-8')); const n = r.filePaths.map(x => ({ path: x, name: path.basename(x), type: path.extname(x).substring(1) })); d.files.push(...n.filter(f => !d.files.some(ex => ex.path === f.path))); await fs.promises.writeFile(p, JSON.stringify(d, null, 2)); return d.files; } return null; });
   ipcMain.handle('project:add-folder', async (e, projectId) => { const r = await dialog.showOpenDialog(mainWindow, { properties: ['openDirectory'] }); if (!r.canceled && r.filePaths.length > 0) { const folderPath = r.filePaths[0]; const allFiles = await scanDirectory(folderPath); const p = path.join(getProjectsPath(), `${projectId}.json`); const d = JSON.parse(await fs.promises.readFile(p, 'utf-8')); const newFiles = allFiles.filter(f => !d.files.some(existing => existing.path === f.path)); d.files.push(...newFiles); d.rootPath = folderPath; await fs.promises.writeFile(p, JSON.stringify(d, null, 2)); return d.files; } return null; });

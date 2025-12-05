@@ -4,7 +4,7 @@ import {
   X, Save, Server, Cpu, Brain, Sliders, Monitor, Type, Database, 
   Terminal, BookOpen, Shield, Zap, Check, ChevronDown, RefreshCw, 
   Sparkles, Info, Github, Bug, FileText, ExternalLink, Download, CheckCircle, Loader2,
-  Trash2, MessageSquare, HardDrive
+  Trash2, MessageSquare, HardDrive, AlertTriangle, Calendar
 } from 'lucide-react';
 import { motion, AnimatePresence } from 'framer-motion';
 
@@ -87,13 +87,94 @@ const InputGroup = React.memo(({ label, desc, children }) => (
 ));
 InputGroup.displayName = 'InputGroup';
 
+// --- NEW: CONFIRMATION MODAL FOR DELETIONS ---
+const ConfirmationModal = ({ isOpen, onClose, onConfirm, title, message, keyword, theme }) => {
+  const [inputValue, setInputValue] = useState('');
+  const [error, setError] = useState('');
+
+  useEffect(() => {
+    if (isOpen) {
+      setInputValue('');
+      setError('');
+    }
+  }, [isOpen]);
+
+  const handleConfirm = () => {
+    if (inputValue.toUpperCase() === keyword.toUpperCase()) {
+      onConfirm();
+      onClose();
+    } else {
+      setError(`Please type "${keyword}" to confirm`);
+    }
+  };
+
+  if (!isOpen) return null;
+
+  return (
+    <div className="fixed inset-0 bg-black/90 backdrop-blur-sm z-[200] flex items-center justify-center p-4" onClick={onClose}>
+      <motion.div
+        initial={{ scale: 0.95, opacity: 0 }}
+        animate={{ scale: 1, opacity: 1 }}
+        onClick={(e) => e.stopPropagation()}
+        className="bg-[#0F0F0F] border-2 border-red-500/30 rounded-2xl w-full max-w-md shadow-2xl p-6"
+      >
+        <div className="flex items-start gap-4 mb-6">
+          <div className="p-3 rounded-xl bg-red-500/10 text-red-400">
+            <AlertTriangle size={24} />
+          </div>
+          <div className="flex-1">
+            <h3 className="text-lg font-bold text-white mb-2">{title}</h3>
+            <p className="text-sm text-gray-400 leading-relaxed">{message}</p>
+          </div>
+        </div>
+
+        <div className="mb-6">
+          <label className="block text-xs font-bold text-gray-400 mb-2">
+            Type <span className="text-red-400 font-mono">{keyword}</span> to confirm
+          </label>
+          <input
+            type="text"
+            value={inputValue}
+            onChange={(e) => { setInputValue(e.target.value); setError(''); }}
+            className="w-full bg-black/50 border border-white/10 rounded-xl p-3 text-sm text-white focus:outline-none focus:border-red-500/50"
+            placeholder={keyword}
+            autoFocus
+          />
+          {error && (
+            <p className="text-xs text-red-400 mt-2 flex items-center gap-1">
+              <AlertTriangle size={12} /> {error}
+            </p>
+          )}
+        </div>
+
+        <div className="flex gap-3">
+          <button
+            onClick={onClose}
+            className="flex-1 px-4 py-2.5 rounded-xl text-sm font-medium text-gray-400 hover:text-white hover:bg-white/5 transition-colors"
+          >
+            Cancel
+          </button>
+          <button
+            onClick={handleConfirm}
+            className="flex-1 px-4 py-2.5 rounded-xl text-sm font-bold text-white bg-red-600 hover:bg-red-500 transition-colors"
+          >
+            Delete
+          </button>
+        </div>
+      </motion.div>
+    </div>
+  );
+};
+
 export const Settings = ({ isOpen, onClose }) => {
   const { settings, updateSettings, availableModels, refreshModels, factoryReset } = useLumina();
   const [form, setForm] = useState(settings);
   const [activeTab, setActiveTab] = useState('capabilities');
   const [isRefreshing, setIsRefreshing] = useState(false);
   const [hasChanges, setHasChanges] = useState(false);
-  const [showConfirmReset, setShowConfirmReset] = useState(false);
+  
+  // --- CONFIRMATION MODAL STATE ---
+  const [confirmModal, setConfirmModal] = useState({ isOpen: false, type: '', keyword: '', message: '' });
   
   // [NEW] OLLAMA CONNECTION STATE
   const [connectionStatus, setConnectionStatus] = useState('idle'); 
@@ -161,21 +242,57 @@ export const Settings = ({ isOpen, onClose }) => {
     setTimeout(() => setIsRefreshing(false), 800);
   }, [refreshModels]);
 
-  // --- REFINEMENT: SPECIFIC RESET ACTIONS ---
-  const handleReset = useCallback((type) => {
-    let confirmMsg = "";
-    if (type === 'chats') confirmMsg = "Are you sure? This will delete ALL chat sessions.";
-    else if (type === 'cache') confirmMsg = "Are you sure? This will delete the web research cache.";
-    else if (type === 'factory') confirmMsg = "WARNING: This will delete ALL chats, projects, and settings.";
+  // --- NEW: SPECIFIC RESET ACTIONS WITH CONFIRMATION ---
+  const handleReset = useCallback(async (type) => {
+    let keyword = '';
+    let message = '';
+    let title = '';
 
-    if (window.confirm(confirmMsg)) {
-        if (type === 'factory') factoryReset();
-        // NOTE: Additional IPC handlers (e.g., system:clear-cache) would be added to main.cjs here
-        // For now, we simulate the action or rely on factoryReset if necessary.
-        setShowConfirmReset(false);
-        // onClose(); // Don't close immediately for specific resets
+    if (type === 'chats') {
+      keyword = 'DELETE CHATS';
+      title = 'Delete All Chat Sessions';
+      message = 'This will permanently delete all your chat history. This action cannot be undone.';
+    } else if (type === 'cache') {
+      keyword = 'DELETE CACHE';
+      title = 'Delete Research Cache';
+      message = 'This will remove all cached web research data. You can always re-fetch the content later.';
+    } else if (type === 'calendar') {
+      keyword = 'DELETE CALENDAR';
+      title = 'Delete All Calendar Events';
+      message = 'This will permanently delete all your calendar events and schedules. This action cannot be undone.';
+    } else if (type === 'factory') {
+      keyword = 'FACTORY RESET';
+      title = 'Factory Reset';
+      message = 'This will delete ALL data including chats, projects, calendar, and settings. This action is irreversible.';
     }
-  }, [factoryReset]);
+
+    setConfirmModal({
+      isOpen: true,
+      type,
+      keyword,
+      message,
+      title
+    });
+  }, []);
+
+  const executeReset = useCallback(async () => {
+    const type = confirmModal.type;
+    
+    try {
+      if (type === 'chats') {
+        await window.lumina.deleteChats();
+      } else if (type === 'cache') {
+        await window.lumina.deleteCache();
+      } else if (type === 'calendar') {
+        await window.lumina.deleteCalendar();
+      } else if (type === 'factory') {
+        await factoryReset();
+        onClose();
+      }
+    } catch (error) {
+      console.error('Reset error:', error);
+    }
+  }, [confirmModal.type, factoryReset, onClose]);
 
   // --- UPDATE LOGIC (UI FORCE UPDATE) ---
   const checkForUpdates = () => {
@@ -210,6 +327,7 @@ export const Settings = ({ isOpen, onClose }) => {
   if (!isOpen) return null;
 
   return (
+    <>
     <div className="fixed inset-0 bg-black/80 backdrop-blur-xl z-[100] flex items-center justify-center p-4 sm:p-8 animate-fade-in">
       <motion.div initial={{ scale: 0.95, opacity: 0 }} animate={{ scale: 1, opacity: 1 }} className="bg-[#030304] w-full max-w-5xl h-[750px] max-h-[90vh] rounded-3xl border border-white/10 shadow-2xl flex flex-col overflow-hidden relative">
         <div className="absolute inset-0 bg-noise opacity-20 pointer-events-none"></div>
@@ -349,7 +467,7 @@ export const Settings = ({ isOpen, onClose }) => {
                               <HardDrive size={20} /> <span className="mt-1">Research Cache</span>
                            </button>
                            <button onClick={() => handleReset('calendar')} className="flex flex-col items-center justify-center p-4 bg-[#0A0A0A] border border-white/10 rounded-xl text-xs text-red-400 hover:bg-white/5 transition-all">
-                              <Trash2 size={20} /> <span className="mt-1">Calendar</span>
+                              <Calendar size={20} /> <span className="mt-1">Calendar</span>
                            </button>
                         </div>
                       </InputGroup>
@@ -481,5 +599,17 @@ export const Settings = ({ isOpen, onClose }) => {
         </div>
       </motion.div>
     </div>
+
+    {/* Confirmation Modal */}
+    <ConfirmationModal
+      isOpen={confirmModal.isOpen}
+      onClose={() => setConfirmModal({ ...confirmModal, isOpen: false })}
+      onConfirm={executeReset}
+      title={confirmModal.title}
+      message={confirmModal.message}
+      keyword={confirmModal.keyword}
+      theme={localTheme}
+    />
+    </>
   );
 };
