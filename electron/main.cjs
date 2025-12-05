@@ -29,11 +29,12 @@ const getUserDataPath = () => app.getPath('userData');
 const getSessionsPath = () => path.join(getUserDataPath(), 'sessions');
 const getProjectsPath = () => path.join(getUserDataPath(), 'projects');
 const getCachePath = () => path.join(getProjectsPath(), 'cache');
+const getGeneratedFilesPath = () => path.join(getUserDataPath(), 'generated-files'); // NEW: For Zenith files
 const getSettingsPath = () => path.join(getUserDataPath(), 'settings.json');
 const getCalendarPath = () => path.join(getUserDataPath(), 'calendar.json');
 
 // Ensure directories exist
-[getSessionsPath(), getProjectsPath(), getCachePath()].forEach(dir => {
+[getSessionsPath(), getProjectsPath(), getCachePath(), getGeneratedFilesPath()].forEach(dir => {
   if (!fs.existsSync(dir)) fs.mkdirSync(dir, { recursive: true });
 });
 
@@ -281,7 +282,7 @@ app.whenReady().then(() => {
   ipcMain.handle('settings:save', async (e, settings) => { await fs.promises.writeFile(getSettingsPath(), JSON.stringify(settings, null, 2)); return true; });
   ipcMain.handle('system:factory-reset', async () => { try { const del = async (d) => { if(fs.existsSync(d)){ for(const f of await fs.promises.readdir(d)){ const c=path.join(d,f); if((await fs.promises.lstat(c)).isDirectory()) await fs.promises.rm(c,{recursive:true}); else await fs.promises.unlink(c); } } }; await del(getSessionsPath()); await del(getProjectsPath()); await fs.promises.writeFile(getSettingsPath(), JSON.stringify(DEFAULT_SETTINGS)); return true; } catch(e){ return false; } });
   
-  // --- NEW: SPECIFIC DATA DELETION HANDLERS ---
+  // --- SPECIFIC DATA DELETION HANDLERS ---
   ipcMain.handle('system:delete-chats', async () => { 
     try { 
       const sessionsPath = getSessionsPath();
@@ -327,7 +328,7 @@ app.whenReady().then(() => {
     } 
   });
   
-  // --- ZENITH FILE SAVE ---
+  // --- ZENITH FILE SAVE (Original) ---
   ipcMain.handle('system:save-file', async (e, { content, filename }) => {
     const { filePath } = await dialog.showSaveDialog(mainWindow, {
       defaultPath: filename || 'zenith-draft.md',
@@ -344,7 +345,80 @@ app.whenReady().then(() => {
     return false;
   });
 
-  // --- NEW: OPEN FILE IN SYSTEM DEFAULT APP ---
+  // ==========================================
+  // NEW: ZENITH → PROJECTS INTEGRATION
+  // ==========================================
+
+  // Save generated file to internal storage
+  ipcMain.handle('system:save-generated-file', async (e, { content, filename }) => {
+    try {
+      const filePath = path.join(getGeneratedFilesPath(), filename);
+      await fs.promises.writeFile(filePath, content, 'utf-8');
+      return { success: true, path: filePath };
+    } catch (error) {
+      console.error('Save generated file error:', error);
+      return { success: false, error: error.message };
+    }
+  });
+
+  // Read file from internal storage
+  ipcMain.handle('system:read-file', async (e, filename) => {
+    try {
+      const filePath = path.join(getGeneratedFilesPath(), filename);
+      if (!fs.existsSync(filePath)) {
+        return { success: false, error: 'File not found' };
+      }
+      const content = await fs.promises.readFile(filePath, 'utf-8');
+      return { success: true, content };
+    } catch (error) {
+      console.error('Read file error:', error);
+      return { success: false, error: error.message };
+    }
+  });
+
+  // Add file to project (KEY METHOD FOR INTEGRATION)
+  ipcMain.handle('project:add-file-to-project', async (e, { projectId, filename }) => {
+    try {
+      const projectPath = path.join(getProjectsPath(), `${projectId}.json`);
+      
+      if (!fs.existsSync(projectPath)) {
+        return { success: false, error: 'Project not found' };
+      }
+
+      const project = JSON.parse(await fs.promises.readFile(projectPath, 'utf-8'));
+      const filePath = path.join(getGeneratedFilesPath(), filename);
+
+      if (!fs.existsSync(filePath)) {
+        return { success: false, error: 'File not found' };
+      }
+
+      // Check if file already exists in project
+      const exists = project.files.some(f => f.name === filename || f.path === filePath);
+      
+      if (!exists) {
+        project.files.push({
+          name: filename,
+          path: filePath,
+          type: 'md', // Zenith generates markdown
+          addedAt: new Date().toISOString(),
+          source: 'zenith'
+        });
+
+        await fs.promises.writeFile(projectPath, JSON.stringify(project, null, 2));
+      }
+
+      return { success: true, files: project.files };
+    } catch (error) {
+      console.error('Add file to project error:', error);
+      return { success: false, error: error.message };
+    }
+  });
+
+  // ==========================================
+  // END ZENITH INTEGRATION
+  // ==========================================
+
+  // --- OPEN FILE IN SYSTEM DEFAULT APP ---
   ipcMain.handle('system:open-file', async (e, filePath) => {
     try {
       if (!fs.existsSync(filePath)) {
@@ -361,9 +435,8 @@ app.whenReady().then(() => {
   // --- PROJECT MANAGEMENT ---
   ipcMain.handle('project:list', async () => { const d = getProjectsPath(); const f = await fs.promises.readdir(d); const p = []; for (const x of f) { if(x.endsWith('.json')) p.push(JSON.parse(await fs.promises.readFile(path.join(d, x), 'utf-8'))); } return p; });
   
-  // --- UPDATED: PROJECT CREATE WITH CHARACTER LIMIT (100 chars) ---
+  // --- PROJECT CREATE WITH CHARACTER LIMIT (100 chars) ---
   ipcMain.handle('project:create', async (e, { id, name }) => { 
-    // Limit project name to 100 characters
     const limitedName = name.substring(0, 100);
     const p = path.join(getProjectsPath(), `${id}.json`); 
     const n = { id, name: limitedName, files: [], systemPrompt: "", createdAt: new Date() }; 
@@ -374,7 +447,7 @@ app.whenReady().then(() => {
   ipcMain.handle('project:delete', async (e, id) => { await fs.promises.unlink(path.join(getProjectsPath(), `${id}.json`)); return true; });
   ipcMain.handle('project:update-settings', async (e, { id, systemPrompt }) => { const p = path.join(getProjectsPath(), `${id}.json`); if (fs.existsSync(p)) { const d = JSON.parse(await fs.promises.readFile(p, 'utf-8')); d.systemPrompt = systemPrompt; await fs.promises.writeFile(p, JSON.stringify(d, null, 2)); return d; } return null; });
   
-  // --- NEW: DELETE FILE FROM PROJECT ---
+  // --- DELETE FILE FROM PROJECT ---
   ipcMain.handle('project:delete-file', async (e, { projectId, filePath }) => {
     try {
       const p = path.join(getProjectsPath(), `${projectId}.json`);
@@ -550,11 +623,9 @@ app.whenReady().then(() => {
     }
 
     // [FIX] 2. Smart Selection Logic
-    // If we have a selected model, but it's not installed, try to find a close match or fallback
     if (availableModels.length > 0) {
         const exactMatch = availableModels.find(m => m === selectedModel);
         if (!exactMatch) {
-            // If the specific model (e.g. "llama3:latest") isn't found, pick the first available non-embed model
             const fallback = availableModels.find(m => !m.includes('embed')) || availableModels[0];
             console.log(`Requested model '${selectedModel}' not found. Falling back to '${fallback}'`);
             selectedModel = fallback;
@@ -574,7 +645,6 @@ app.whenReady().then(() => {
             }) 
         });
 
-        // [FIX] 3. Detailed Error Handling
         if (!r.ok) {
             const errText = await r.text();
             throw new Error(`Ollama API Error (${r.status}): ${errText || r.statusText}`);
