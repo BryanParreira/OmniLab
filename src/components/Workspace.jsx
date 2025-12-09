@@ -211,19 +211,108 @@ const MessageBubble = React.memo(({ msg, theme, fontSize, isStreaming }) => {
   );
 });
 
-const QuickActions = ({ onAction, settings, theme, runFlashpoint, runBlueprint }) => {
+// ENHANCED QuickActions with better handler system
+const QuickActions = ({ onAction, settings, theme, runFlashpoint, runBlueprint, messages, input }) => {
+  const hasContext = messages.length > 0;
+  const hasInput = input && input.trim().length > 0;
+  
+  // Context-aware action handler
+  const handleAction = useCallback((action) => {
+    // If action has custom handler, use it
+    if (action.action) {
+      action.action();
+      return;
+    }
+    
+    // If action needs context and we don't have any, show helpful message
+    if (action.needsContext && !hasContext && !hasInput) {
+      onAction(`${action.cmd}\n\n(Please provide some context first - share code, text, or ask a question)`);
+      return;
+    }
+    
+    // Build contextual prompt
+    let finalPrompt = action.cmd;
+    
+    // If we have input, append it to the command
+    if (hasInput && action.appendInput) {
+      finalPrompt = `${action.cmd}\n\nRegarding: ${input}`;
+    }
+    
+    // If action has a prefix for context, add it
+    if (hasContext && action.contextPrefix) {
+      finalPrompt = `${action.contextPrefix} ${action.cmd}`;
+    }
+    
+    onAction(finalPrompt);
+  }, [hasContext, hasInput, input, onAction]);
+
   const studentActions = [
-    { label: 'Flashpoint', icon: BrainCircuit, action: runFlashpoint }, 
-    { label: 'Explain Simple', icon: BookOpen, cmd: 'Explain this simply.' }, 
-    { label: 'Study Guide', icon: GraduationCap, cmd: 'Create a study guide.' }, 
-    { label: 'Essay', icon: PenTool, cmd: 'Create an essay outline.' }
+    { 
+      label: 'Flashpoint', 
+      icon: BrainCircuit, 
+      action: runFlashpoint,
+      tooltip: 'Quick knowledge synthesis'
+    }, 
+    { 
+      label: 'Explain Simple', 
+      icon: BookOpen, 
+      cmd: 'Explain this in simple terms that a beginner can understand, using clear examples and avoiding jargon.',
+      needsContext: true,
+      appendInput: true,
+      tooltip: 'Break down complex topics'
+    }, 
+    { 
+      label: 'Study Guide', 
+      icon: GraduationCap, 
+      cmd: 'Create a comprehensive study guide with key concepts, definitions, and practice questions.',
+      needsContext: true,
+      appendInput: true,
+      tooltip: 'Generate study materials'
+    }, 
+    { 
+      label: 'Essay', 
+      icon: PenTool, 
+      cmd: 'Create a detailed essay outline with introduction, body paragraphs, and conclusion structure.',
+      needsContext: false,
+      appendInput: true,
+      tooltip: 'Outline your essay'
+    }
   ];
+
   const devActions = [
-    { label: 'Blueprint', icon: Layers, action: () => runBlueprint("Basic Node.js API") }, 
-    { label: 'Code Review', icon: Eye, cmd: 'Review this code.' }, 
-    { label: 'Refactor', icon: Zap, cmd: 'Refactor for performance.' }, 
-    { label: 'Diff Doctor', icon: GitBranch, cmd: 'Analyze git diff.' }
+    { 
+      label: 'Blueprint', 
+      icon: Layers, 
+      action: () => runBlueprint("Basic Node.js API"),
+      tooltip: 'Generate project architecture'
+    }, 
+    { 
+      label: 'Code Review', 
+      icon: Eye, 
+      cmd: 'Perform a thorough code review focusing on: best practices, potential bugs, performance issues, security concerns, and code quality.',
+      needsContext: true,
+      contextPrefix: 'Based on our previous discussion:',
+      appendInput: true,
+      tooltip: 'Comprehensive code analysis'
+    }, 
+    { 
+      label: 'Refactor', 
+      icon: Zap, 
+      cmd: 'Refactor this code to improve: readability, performance, maintainability, and follow modern best practices.',
+      needsContext: true,
+      appendInput: true,
+      tooltip: 'Optimize and clean code'
+    }, 
+    { 
+      label: 'Debug', 
+      icon: ShieldAlert, 
+      cmd: 'Help me debug this issue. Analyze the code, identify potential problems, and suggest solutions with explanations.',
+      needsContext: true,
+      appendInput: true,
+      tooltip: 'Find and fix issues'
+    }
   ];
+
   const actions = settings.developerMode ? devActions : studentActions;
 
   return (
@@ -231,10 +320,14 @@ const QuickActions = ({ onAction, settings, theme, runFlashpoint, runBlueprint }
       {actions.map((action) => (
         <button 
           key={action.label} 
-          onClick={() => action.action ? action.action() : onAction(action.cmd)} 
-          className={`group flex items-center gap-2 px-3 py-1.5 bg-[#151515] border border-white/10 rounded-full text-[11px] text-gray-400 hover:text-white ${theme.hoverBg} transition-all whitespace-nowrap shadow-sm`}
+          onClick={() => handleAction(action)}
+          title={action.tooltip}
+          className={`group flex items-center gap-2 px-3 py-1.5 bg-[#151515] border border-white/10 rounded-full text-[11px] text-gray-400 hover:text-white ${theme.hoverBg} transition-all whitespace-nowrap shadow-sm hover:shadow-md hover:scale-105 active:scale-95`}
         >
-          <action.icon size={14} className={`${theme.accentText} opacity-70 group-hover:opacity-100 transition-colors`} />
+          <action.icon 
+            size={14} 
+            className={`${theme.accentText} opacity-70 group-hover:opacity-100 transition-all group-hover:rotate-12`} 
+          />
           <span className="font-medium tracking-wide">{action.label}</span>
         </button>
       ))}
@@ -373,6 +466,15 @@ export const Workspace = () => {
     } 
   }, [handleSend]);
 
+  // Enhanced action handler that sets input
+  const handleQuickAction = useCallback((prompt) => {
+    setInput(prompt);
+    // Focus textarea after setting input
+    setTimeout(() => {
+      textareaRef.current?.focus();
+    }, 0);
+  }, []);
+
   if (!isOllamaRunning) {
     return (
       <div className="flex-1 flex flex-col items-center justify-center text-gray-500">
@@ -412,7 +514,15 @@ export const Workspace = () => {
                 <h1 className="text-5xl font-bold text-white tracking-tighter">OmniLab <span className={theme.accentText}>{settings.developerMode ? 'Forge' : 'Nexus'}</span></h1>
                 <p className="text-gray-500 max-w-md mx-auto text-sm leading-relaxed font-light">{settings.developerMode ? 'Advanced Architecture & Engineering Environment.' : 'Universal Research & Knowledge Synthesis Engine.'}</p>
                 <div className="mt-8">
-                  <QuickActions onAction={(cmd) => setInput(cmd)} settings={settings} theme={theme} runFlashpoint={runFlashpoint} runBlueprint={runBlueprint} />
+                  <QuickActions 
+                    onAction={handleQuickAction} 
+                    settings={settings} 
+                    theme={theme} 
+                    runFlashpoint={runFlashpoint} 
+                    runBlueprint={runBlueprint}
+                    messages={messages}
+                    input={input}
+                  />
                 </div>
               </div>
             )}
@@ -424,7 +534,15 @@ export const Workspace = () => {
         <div className="absolute bottom-0 left-0 right-0 bg-gradient-to-t from-[#000000] via-[#000000] to-transparent pt-20 pb-4">
           <div className="max-w-3xl mx-auto pointer-events-auto flex flex-col gap-3 px-6">
             {!isLoading && messages.length > 0 && (
-              <QuickActions onAction={(cmd) => setInput(cmd)} settings={settings} theme={theme} runFlashpoint={runFlashpoint} runBlueprint={runBlueprint} />
+              <QuickActions 
+                onAction={handleQuickAction} 
+                settings={settings} 
+                theme={theme} 
+                runFlashpoint={runFlashpoint} 
+                runBlueprint={runBlueprint}
+                messages={messages}
+                input={input}
+              />
             )}
             
             {/* Attachments preview */}
