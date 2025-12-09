@@ -1317,7 +1317,7 @@ export const Canvas = () => {
             className={`flex items-center gap-2 pl-3 pr-4 py-2 rounded-xl text-xs font-bold text-white ${theme.primaryBg} hover:brightness-110 shadow-lg transition-all`}
           >
             <Sparkles size={14} className="animate-pulse"/>
-            <span>AI Analyze</span>
+            <span>Analyze</span>
           </button>
         </div>
 
