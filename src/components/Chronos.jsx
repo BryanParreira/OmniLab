@@ -23,7 +23,12 @@ import {
   Mic,
   MicOff,
   Volume2,
-  Upload
+  Upload,
+  Filter,
+  Search,
+  Zap,
+  TrendingUp,
+  BarChart3
 } from 'lucide-react';
 import { motion, AnimatePresence } from 'framer-motion';
 
@@ -136,15 +141,15 @@ const formatDate = (date) => {
 
 const getEventColor = (type, isDev) => {
   if (isDev) {
-    if (type === 'release') return 'bg-rose-500/20 text-rose-200 border-rose-500/30 border-l-4 border-l-rose-500';
-    if (type === 'task') return 'bg-orange-500/20 text-orange-200 border-orange-500/30 border-l-4 border-l-orange-500';
-    if (type === 'deadline') return 'bg-red-500/20 text-red-200 border-red-500/30 border-l-4 border-l-red-500';
-    return 'bg-gray-800 text-gray-400 border-gray-700 border';
+    if (type === 'release') return 'bg-rose-500/10 text-rose-400 border-rose-500/30 hover:border-rose-500/50';
+    if (type === 'task') return 'bg-orange-500/10 text-orange-400 border-orange-500/30 hover:border-orange-500/50';
+    if (type === 'deadline') return 'bg-red-500/10 text-red-400 border-red-500/30 hover:border-red-500/50';
+    return 'bg-gray-800 text-gray-400 border-gray-700';
   }
-  if (type === 'exam') return 'bg-red-500/20 text-red-200 border-red-500/30 border-l-4 border-l-red-500';
-  if (type === 'study') return 'bg-indigo-500/20 text-indigo-200 border-indigo-500/30 border-l-4 border-l-indigo-500';
-  if (type === 'assignment') return 'bg-blue-500/20 text-blue-200 border-blue-500/30 border-l-4 border-l-blue-500';
-  return 'bg-emerald-500/20 text-emerald-200 border-emerald-500/30 border-l-4 border-l-emerald-500';
+  if (type === 'exam') return 'bg-red-500/10 text-red-400 border-red-500/30 hover:border-red-500/50';
+  if (type === 'study') return 'bg-indigo-500/10 text-indigo-400 border-indigo-500/30 hover:border-indigo-500/50';
+  if (type === 'assignment') return 'bg-blue-500/10 text-blue-400 border-blue-500/30 hover:border-blue-500/50';
+  return 'bg-emerald-500/10 text-emerald-400 border-emerald-500/30 hover:border-emerald-500/50';
 };
 
 const generateICS = (events) => {
@@ -256,8 +261,11 @@ const DraggableEvent = ({ event, onClick, theme }) => {
     const [isHovered, setIsHovered] = useState(false);
 
     return (
-        <div
+        <motion.div
             draggable
+            initial={{ opacity: 0, y: 5 }}
+            animate={{ opacity: 1, y: 0 }}
+            exit={{ opacity: 0, scale: 0.95 }}
             onDragStart={(e) => {
                 e.dataTransfer.setData("text/plain", event.id);
                 e.dataTransfer.effectAllowed = "move";
@@ -268,15 +276,20 @@ const DraggableEvent = ({ event, onClick, theme }) => {
             }}
             onMouseEnter={() => setIsHovered(true)}
             onMouseLeave={() => setIsHovered(false)}
-            className={`text-[10px] px-2.5 py-1.5 rounded-lg truncate font-medium cursor-grab active:cursor-grabbing hover:brightness-125 active:scale-95 transition-all flex items-center gap-1.5 group border ${getEventColor(event.type, theme.isDev)} ${isHovered ? 'shadow-lg z-10' : ''}`}
+            className={`text-[10px] px-2.5 py-1.5 rounded-lg truncate font-medium cursor-grab active:cursor-grabbing transition-all flex items-center gap-1.5 group border ${getEventColor(event.type, theme.isDev)} ${
+                isHovered ? 'shadow-lg scale-105 z-10 brightness-110' : ''
+            }`}
             title={`${event.title}${event.time ? ` at ${event.time}` : ''}\nClick to view details`}
         >
-            <GripHorizontal size={10} className="opacity-0 group-hover:opacity-70 transition-opacity flex-shrink-0" />
+            <GripHorizontal size={10} className="opacity-0 group-hover:opacity-50 transition-opacity flex-shrink-0" />
             {event.time && (
-                <span className="opacity-80 font-mono text-[9px] bg-black/20 px-1 rounded">{event.time}</span>
+                <span className="opacity-70 font-mono text-[9px] bg-black/30 px-1.5 py-0.5 rounded">{event.time}</span>
             )}
-            <span className="truncate font-semibold">{event.title}</span>
-        </div>
+            <span className="truncate font-bold">{event.title}</span>
+            {event.priority === 'high' && (
+                <AlertCircle size={10} className="flex-shrink-0 opacity-70" />
+            )}
+        </motion.div>
     );
 };
 
@@ -285,7 +298,7 @@ const CalendarDay = React.memo(({ day, dateStr, dayEvents, isToday, theme, onDay
   const [isDragOver, setIsDragOver] = useState(false);
   const [isHovered, setIsHovered] = useState(false);
 
-  if (!day) return <div className="bg-[#050505]/50 border border-white/[0.02]" />;
+  if (!day) return <div className="bg-[#050505] border border-white/[0.03] rounded-lg" />;
 
   const handleDrop = (e) => {
       e.preventDefault();
@@ -304,8 +317,9 @@ const CalendarDay = React.memo(({ day, dateStr, dayEvents, isToday, theme, onDay
       onClick={() => { if(day) onDayClick(); }}
       onMouseEnter={() => setIsHovered(true)}
       onMouseLeave={() => setIsHovered(false)}
-      initial={{ opacity: 0 }}
-      animate={{ opacity: 1 }}
+      initial={{ opacity: 0, scale: 0.98 }}
+      animate={{ opacity: 1, scale: 1 }}
+      transition={{ duration: 0.2 }}
       onDragOver={(e) => { 
           e.preventDefault(); 
           e.stopPropagation();
@@ -316,24 +330,27 @@ const CalendarDay = React.memo(({ day, dateStr, dayEvents, isToday, theme, onDay
           setIsDragOver(false);
       }}
       onDrop={handleDrop}
-      className={`relative border p-3 flex flex-col transition-all cursor-pointer min-h-[120px] group ${
-        isDragOver ? 'border-blue-500/60 bg-blue-500/10 ring-2 ring-blue-500/30' : 'border-white/5'
-      } ${isToday ? `bg-gradient-to-br from-blue-500/5 to-purple-500/5 border-blue-500/30` : 'bg-[#0A0A0A] hover:bg-[#0D0D0D]'} ${
-        isHovered && !isDragOver ? 'shadow-lg shadow-white/5' : ''
-      } rounded-lg`}
+      className={`relative border p-3 flex flex-col transition-all cursor-pointer min-h-[110px] group rounded-xl ${
+        isDragOver ? 'border-blue-500/60 bg-blue-500/10 ring-2 ring-blue-500/30 shadow-lg shadow-blue-500/20' : 'border-white/[0.08]'
+      } ${isToday 
+        ? 'bg-gradient-to-br from-blue-500/[0.08] to-purple-500/[0.08] border-blue-500/30 shadow-inner' 
+        : 'bg-gradient-to-br from-[#0A0A0A] to-[#0C0C0C] hover:from-[#0D0D0D] hover:to-[#0F0F0F]'
+      } ${
+        isHovered && !isDragOver ? 'shadow-lg shadow-black/50 border-white/20' : ''
+      }`}
     >
       {/* Day Number Header */}
       <div className="flex justify-between items-start mb-2">
-        <div className={`text-xs font-bold w-7 h-7 flex items-center justify-center rounded-full transition-all ${
+        <div className={`text-xs font-bold w-7 h-7 flex items-center justify-center rounded-xl transition-all ${
           isToday 
-            ? `bg-gradient-to-br from-blue-600 to-purple-600 text-white shadow-lg shadow-blue-500/30` 
-            : 'text-gray-400 group-hover:text-white group-hover:bg-white/5'
+            ? 'bg-gradient-to-br from-blue-600 to-purple-600 text-white shadow-lg shadow-blue-500/30' 
+            : 'text-gray-500 group-hover:text-white group-hover:bg-white/10'
         }`}>
           {day}
         </div>
         {dayEvents.length > 0 && (
           <div className="flex items-center gap-1">
-            <span className="text-[9px] bg-white/10 px-1.5 py-0.5 rounded-md text-gray-400 font-mono font-bold">
+            <span className="text-[9px] bg-white/10 px-1.5 py-0.5 rounded-lg text-gray-400 font-mono font-bold backdrop-blur-sm">
               {dayEvents.length}
             </span>
           </div>
@@ -342,24 +359,31 @@ const CalendarDay = React.memo(({ day, dateStr, dayEvents, isToday, theme, onDay
       
       {/* Events Container */}
       <div className="flex-1 overflow-y-auto custom-scrollbar space-y-1.5">
-        {dayEvents.length === 0 && isHovered && (
-          <div className="flex items-center justify-center h-full text-gray-600 text-[10px] opacity-0 group-hover:opacity-100 transition-opacity">
-            <Plus size={12} className="mr-1" />
-            Add event
-          </div>
-        )}
-        {dayEvents.slice(0, 3).map((event, idx) => (
-            <DraggableEvent 
-                key={event.id || idx} 
-                event={event} 
-                onClick={onEventClick} 
-                theme={theme}
-            />
-        ))}
+        <AnimatePresence>
+          {dayEvents.length === 0 && isHovered && (
+            <motion.div 
+              initial={{ opacity: 0 }}
+              animate={{ opacity: 1 }}
+              exit={{ opacity: 0 }}
+              className="flex items-center justify-center h-full text-gray-600 text-[10px] font-medium"
+            >
+              <Plus size={12} className="mr-1" />
+              Add event
+            </motion.div>
+          )}
+          {dayEvents.slice(0, 3).map((event, idx) => (
+              <DraggableEvent 
+                  key={event.id || idx} 
+                  event={event} 
+                  onClick={onEventClick} 
+                  theme={theme}
+              />
+          ))}
+        </AnimatePresence>
         {dayEvents.length > 3 && (
           <button
             onClick={(e) => { e.stopPropagation(); onDayClick(); }}
-            className="w-full text-[10px] text-gray-500 hover:text-white bg-white/5 hover:bg-white/10 rounded-lg py-1 transition-all font-medium"
+            className="w-full text-[10px] text-gray-500 hover:text-white bg-white/5 hover:bg-white/10 rounded-lg py-1.5 transition-all font-bold border border-white/5"
           >
             +{dayEvents.length - 3} more
           </button>
@@ -367,13 +391,20 @@ const CalendarDay = React.memo(({ day, dateStr, dayEvents, isToday, theme, onDay
       </div>
       
       {/* Drop indicator */}
-      {isDragOver && (
-        <div className="absolute inset-0 flex items-center justify-center pointer-events-none bg-blue-500/10 rounded-lg border-2 border-blue-500/50 border-dashed">
-          <div className="bg-blue-500 text-white px-3 py-1.5 rounded-lg text-xs font-bold shadow-lg">
-            Drop here
-          </div>
-        </div>
-      )}
+      <AnimatePresence>
+        {isDragOver && (
+          <motion.div 
+            initial={{ opacity: 0, scale: 0.95 }}
+            animate={{ opacity: 1, scale: 1 }}
+            exit={{ opacity: 0 }}
+            className="absolute inset-0 flex items-center justify-center pointer-events-none bg-blue-500/10 rounded-xl border-2 border-blue-500/50 border-dashed backdrop-blur-sm"
+          >
+            <div className="bg-gradient-to-r from-blue-600 to-purple-600 text-white px-4 py-2 rounded-xl text-xs font-bold shadow-2xl">
+              Drop here
+            </div>
+          </motion.div>
+        )}
+      </AnimatePresence>
     </motion.div>
   );
 });
@@ -394,15 +425,15 @@ const WeekView = React.memo(({ currentDate, eventsByDate, theme, onEventClick })
   const hours = Array.from({ length: 15 }, (_, i) => i + 7);
 
   return (
-    <div className="flex flex-col h-full bg-[#0A0A0A] border border-white/5 rounded-2xl overflow-hidden">
-      <div className="grid grid-cols-8 border-b border-white/5 bg-[#111]">
-        <div className="p-3 border-r border-white/5 bg-[#080808]"></div>
+    <div className="flex flex-col h-full bg-gradient-to-br from-[#0A0A0A] to-[#0C0C0C] border border-white/[0.08] rounded-2xl overflow-hidden shadow-2xl">
+      <div className="grid grid-cols-8 border-b border-white/10 bg-gradient-to-r from-[#111] to-[#0F0F0F]">
+        <div className="p-3 border-r border-white/10 bg-[#080808]"></div>
         {weekDates.map((date, i) => {
           const isToday = formatDate(date) === formatDate(new Date());
           return (
-            <div key={i} className={`p-2 text-center border-r border-white/5 last:border-r-0 ${isToday ? 'bg-white/5' : ''}`}>
-              <div className="text-[10px] text-gray-500 uppercase font-bold">{date.toLocaleDateString('en-US', { weekday: 'short' })}</div>
-              <div className={`text-sm font-bold mt-0.5 ${isToday ? theme.accentText : 'text-white'}`}>
+            <div key={i} className={`p-3 text-center border-r border-white/10 last:border-r-0 transition-colors ${isToday ? 'bg-gradient-to-br from-blue-500/10 to-purple-500/10' : 'hover:bg-white/[0.02]'}`}>
+              <div className="text-[10px] text-gray-500 uppercase font-bold tracking-wider">{date.toLocaleDateString('en-US', { weekday: 'short' })}</div>
+              <div className={`text-sm font-bold mt-1 ${isToday ? theme.accentText : 'text-white'}`}>
                 {date.getDate()}
               </div>
             </div>
@@ -412,10 +443,10 @@ const WeekView = React.memo(({ currentDate, eventsByDate, theme, onEventClick })
 
       <div className="flex-1 overflow-y-auto custom-scrollbar relative">
         <div className="grid grid-cols-8">
-           <div className="border-r border-white/5 bg-[#080808]">
+           <div className="border-r border-white/10 bg-[#080808]">
               {hours.map(hour => (
-                <div key={hour} className="h-16 border-b border-white/5 text-[9px] text-gray-500 p-2 text-right font-mono">
-                  {hour > 12 ? `${hour - 12} PM` : `${hour} AM`}
+                <div key={hour} className="h-16 border-b border-white/[0.05] text-[9px] text-gray-600 p-2 text-right font-mono font-bold">
+                  {hour > 12 ? `${hour - 12} PM` : hour === 12 ? '12 PM' : `${hour} AM`}
                 </div>
               ))}
            </div>
@@ -425,30 +456,36 @@ const WeekView = React.memo(({ currentDate, eventsByDate, theme, onEventClick })
              const dayEvents = eventsByDate[dStr] || [];
              
              return (
-              <div key={i} className="border-r border-white/5 last:border-r-0 relative group hover:bg-white/[0.01]">
-                {hours.map(h => <div key={h} className="h-16 border-b border-white/[0.02]"></div>)}
+              <div key={i} className="border-r border-white/[0.05] last:border-r-0 relative group hover:bg-white/[0.02] transition-colors">
+                {hours.map(h => <div key={h} className="h-16 border-b border-white/[0.03]"></div>)}
                 
-                {dayEvents.map((ev, idx) => {
-                  let top = 0;
-                  if (ev.time) {
-                    const [h, m] = ev.time.split(':').map(Number);
-                    if (h >= 7 && h <= 21) {
-                       const minutesFrom7 = (h - 7) * 60 + m;
-                       top = (minutesFrom7 / (15 * 60)) * 100;
+                <AnimatePresence>
+                  {dayEvents.map((ev, idx) => {
+                    let top = 0;
+                    if (ev.time) {
+                      const [h, m] = ev.time.split(':').map(Number);
+                      if (h >= 7 && h <= 21) {
+                         const minutesFrom7 = (h - 7) * 60 + m;
+                         top = (minutesFrom7 / (15 * 60)) * 100;
+                      }
                     }
-                  }
-                  
-                  return (
-                    <div 
-                      key={idx}
-                      onClick={(e) => { e.stopPropagation(); onEventClick(ev); }}
-                      className={`absolute left-1 right-1 p-1.5 rounded text-[9px] border leading-tight overflow-hidden cursor-pointer hover:brightness-110 z-10 ${getEventColor(ev.type, theme.isDev)}`}
-                      style={{ top: `${top}%`, height: '36px' }} 
-                    >
-                      <div className="font-bold truncate">{ev.title}</div>
-                    </div>
-                  );
-                })}
+                    
+                    return (
+                      <motion.div 
+                        key={idx}
+                        initial={{ opacity: 0, scale: 0.9 }}
+                        animate={{ opacity: 1, scale: 1 }}
+                        exit={{ opacity: 0, scale: 0.9 }}
+                        onClick={(e) => { e.stopPropagation(); onEventClick(ev); }}
+                        className={`absolute left-1 right-1 p-2 rounded-lg text-[9px] border leading-tight overflow-hidden cursor-pointer hover:brightness-125 hover:scale-105 z-10 transition-all ${getEventColor(ev.type, theme.isDev)} backdrop-blur-sm shadow-lg`}
+                        style={{ top: `${top}%`, height: '40px' }} 
+                      >
+                        <div className="font-bold truncate">{ev.title}</div>
+                        {ev.time && <div className="text-[8px] opacity-70 font-mono">{ev.time}</div>}
+                      </motion.div>
+                    );
+                  })}
+                </AnimatePresence>
               </div>
              );
            })}
@@ -477,97 +514,193 @@ const EventModal = React.memo(({ isOpen, isPlanning, isEditing, onClose, onAdd, 
 
     return (
       <AnimatePresence>
-        <div className="fixed inset-0 bg-black/80 backdrop-blur-sm z-50 flex items-center justify-center p-4" onClick={onClose}>
+        <motion.div 
+          initial={{ opacity: 0 }}
+          animate={{ opacity: 1 }}
+          exit={{ opacity: 0 }}
+          className="fixed inset-0 bg-black/80 backdrop-blur-md z-50 flex items-center justify-center p-4" 
+          onClick={onClose}
+        >
           <motion.div
-            initial={{ scale: 0.95, y: 10, opacity: 0 }}
+            initial={{ scale: 0.95, y: 20, opacity: 0 }}
             animate={{ scale: 1, y: 0, opacity: 1 }}
-            exit={{ scale: 0.95, y: 10, opacity: 0 }}
+            exit={{ scale: 0.95, y: 20, opacity: 0 }}
             onClick={(e) => e.stopPropagation()}
-            className="bg-[#0F0F0F] border border-white/10 rounded-2xl w-full max-w-lg shadow-2xl flex flex-col max-h-[85vh] overflow-hidden"
+            className="bg-gradient-to-br from-[#0F0F0F] to-[#0A0A0A] border border-white/20 rounded-2xl w-full max-w-lg shadow-2xl flex flex-col max-h-[90vh] overflow-hidden"
           >
             
             {!isEditingState && !isPlanning ? (
                 <>
-                    <div className={`p-8 relative overflow-hidden ${theme.softBg} border-b ${theme.primaryBorder}`}>
+                    <div className={`p-8 relative overflow-hidden bg-gradient-to-br ${theme.softBg} border-b border-white/10`}>
                         <div className="absolute top-4 right-4 flex gap-2">
                              <button 
                                onClick={() => speakText(`${props.newEventTitle}. ${formatFriendlyDate(props.newEventDate)}${props.newEventTime ? ` at ${props.newEventTime}` : ''}. ${props.newEventNotes || 'No additional notes'}`)} 
-                               className="p-2 bg-black/20 hover:bg-black/40 text-white rounded-lg backdrop-blur-sm transition-colors" 
+                               className="p-2 bg-black/30 hover:bg-black/50 text-white rounded-lg backdrop-blur-sm transition-all hover:scale-105" 
                                title="Read aloud"
                              >
                                <Volume2 size={16} />
                              </button>
-                             <button onClick={() => setIsEditingState(true)} className="p-2 bg-black/20 hover:bg-black/40 text-white rounded-lg backdrop-blur-sm transition-colors" title="Edit"><Edit3 size={16} /></button>
-                             <button onClick={onClose} className="p-2 bg-black/20 hover:bg-black/40 text-white rounded-lg backdrop-blur-sm transition-colors" title="Close"><X size={16} /></button>
+                             <button 
+                               onClick={() => setIsEditingState(true)} 
+                               className="p-2 bg-black/30 hover:bg-black/50 text-white rounded-lg backdrop-blur-sm transition-all hover:scale-105" 
+                               title="Edit"
+                             >
+                               <Edit3 size={16} />
+                             </button>
+                             <button 
+                               onClick={onClose} 
+                               className="p-2 bg-black/30 hover:bg-black/50 text-white rounded-lg backdrop-blur-sm transition-all hover:scale-105" 
+                               title="Close"
+                             >
+                               <X size={16} />
+                             </button>
                         </div>
 
                         <div className="flex gap-2 mb-4">
-                            <span className={`px-2 py-1 rounded text-[10px] font-bold uppercase tracking-wider border ${theme.primaryBorder} ${theme.primaryText}`}>{props.newEventType}</span>
-                            {props.newEventPriority === 'high' && <span className="px-2 py-1 rounded text-[10px] font-bold uppercase tracking-wider border border-red-500/30 text-red-400 bg-red-500/10 flex items-center gap-1"><AlertCircle size={10} /> High Priority</span>}
+                            <span className={`px-2 py-1 rounded-lg text-[10px] font-bold uppercase tracking-wider border backdrop-blur-sm ${theme.primaryBorder} ${theme.primaryText}`}>{props.newEventType}</span>
+                            {props.newEventPriority === 'high' && (
+                              <span className="px-2 py-1 rounded-lg text-[10px] font-bold uppercase tracking-wider border border-red-500/30 text-red-400 bg-red-500/10 flex items-center gap-1">
+                                <AlertCircle size={10} /> High Priority
+                              </span>
+                            )}
                         </div>
                         
-                        <h2 className="text-3xl font-bold text-white leading-tight mb-2">{props.newEventTitle}</h2>
+                        <h2 className="text-3xl font-bold text-white leading-tight mb-3">{props.newEventTitle}</h2>
                         
                         <div className="flex items-center gap-4 text-sm text-gray-300 font-medium">
-                            <div className="flex items-center gap-1.5"><CalendarIcon size={14} className={theme.primaryText} />{formatFriendlyDate(props.newEventDate)}</div>
-                            {props.newEventTime && <div className="flex items-center gap-1.5"><Clock size={14} className={theme.primaryText} />{props.newEventTime}</div>}
+                            <div className="flex items-center gap-2">
+                              <CalendarIcon size={14} className={theme.primaryText} />
+                              {formatFriendlyDate(props.newEventDate)}
+                            </div>
+                            {props.newEventTime && (
+                              <div className="flex items-center gap-2">
+                                <Clock size={14} className={theme.primaryText} />
+                                {props.newEventTime}
+                              </div>
+                            )}
                         </div>
                     </div>
 
-                    <div className="p-6 bg-[#0F0F0F] flex-1 overflow-y-auto">
-                        <div className="mb-8">
-                            <h4 className="text-xs font-bold text-gray-500 uppercase tracking-widest mb-3 flex items-center gap-2"><AlignLeft size={12} /> Notes & Details</h4>
-                            <div className="p-4 rounded-xl bg-[#151515] border border-white/5 text-gray-300 text-sm leading-relaxed whitespace-pre-wrap">
+                    <div className="p-6 bg-gradient-to-br from-[#0F0F0F] to-[#0A0A0A] flex-1 overflow-y-auto custom-scrollbar">
+                        <div className="mb-6">
+                            <h4 className="text-xs font-bold text-gray-500 uppercase tracking-widest mb-3 flex items-center gap-2">
+                              <AlignLeft size={12} /> Notes & Details
+                            </h4>
+                            <div className="p-4 rounded-xl bg-[#151515] border border-white/10 text-gray-300 text-sm leading-relaxed whitespace-pre-wrap">
                                 {props.newEventNotes || "No additional notes provided for this event."}
                             </div>
                         </div>
 
-                        <div className="flex justify-between items-center pt-6 border-t border-white/5">
-                             <button onClick={onDelete} className="text-red-400 hover:text-red-300 text-sm font-medium flex items-center gap-2 px-3 py-2 rounded-lg hover:bg-red-500/10 transition-colors"><Trash2 size={16} /> Delete Event</button>
-                             <button onClick={onClose} className="text-gray-400 hover:text-white text-sm font-medium">Close</button>
+                        <div className="flex justify-between items-center pt-6 border-t border-white/10">
+                             <button 
+                               onClick={onDelete} 
+                               className="text-red-400 hover:text-red-300 text-sm font-bold flex items-center gap-2 px-4 py-2 rounded-lg hover:bg-red-500/10 transition-all"
+                             >
+                               <Trash2 size={16} /> Delete Event
+                             </button>
+                             <button 
+                               onClick={onClose} 
+                               className="text-gray-400 hover:text-white text-sm font-medium transition-colors"
+                             >
+                               Close
+                             </button>
                         </div>
                     </div>
                 </>
             ) : (
                 <>
-                    <div className="flex items-center justify-between p-5 border-b border-white/10 bg-[#151515]">
+                    <div className="flex items-center justify-between p-5 border-b border-white/10 bg-gradient-to-r from-[#151515] to-[#111]">
                         <div className="flex items-center gap-3">
-                            {isEditing && !isPlanning && <button onClick={() => setIsEditingState(false)} className="text-gray-500 hover:text-white transition-colors"><ArrowLeft size={18} /></button>}
+                            {isEditing && !isPlanning && (
+                              <button 
+                                onClick={() => setIsEditingState(false)} 
+                                className="text-gray-500 hover:text-white transition-all hover:scale-110"
+                              >
+                                <ArrowLeft size={18} />
+                              </button>
+                            )}
                             <h3 className="text-base font-bold text-white flex items-center gap-2">
                                 {isPlanning ? (
-                                    <><div className={`p-1.5 rounded-lg ${theme.softBg} ${theme.accentText}`}><Sparkles size={16} /></div> {settings.developerMode ? "Sprint Planner" : "Study Plan"}</>
+                                    <>
+                                      <div className={`p-1.5 rounded-lg ${theme.softBg} ${theme.accentText}`}>
+                                        <Sparkles size={16} />
+                                      </div> 
+                                      {settings.developerMode ? "Sprint Planner" : "Study Plan"}
+                                    </>
                                 ) : (
-                                    <><div className="p-1.5 rounded-lg bg-white/10 text-white"><Edit3 size={16} /></div> {isEditing ? "Edit Details" : "New Event"}</>
+                                    <>
+                                      <div className="p-1.5 rounded-lg bg-white/10 text-white">
+                                        <Edit3 size={16} />
+                                      </div> 
+                                      {isEditing ? "Edit Details" : "New Event"}
+                                    </>
                                 )}
                             </h3>
                         </div>
-                        <button onClick={onClose} className="text-gray-500 hover:text-white"><X size={18} /></button>
+                        <button 
+                          onClick={onClose} 
+                          className="text-gray-500 hover:text-white transition-all hover:scale-110"
+                        >
+                          <X size={18} />
+                        </button>
                     </div>
                     
                     <div className="p-6 overflow-y-auto custom-scrollbar flex-1 space-y-5">
                     {isPlanning ? (
                         <>
-                        <div className="p-3 bg-blue-500/10 border border-blue-500/20 rounded-xl text-xs text-blue-200">
-                            <strong className="block mb-1 flex items-center gap-1"><Sparkles size={10}/> AI Generator</strong>
+                        <div className="p-4 bg-gradient-to-r from-blue-500/10 to-purple-500/10 border border-blue-500/20 rounded-xl text-xs text-blue-200">
+                            <strong className="block mb-1 flex items-center gap-2 font-bold">
+                              <Sparkles size={12}/> AI Generator
+                            </strong>
                             Tell Chronos what to plan, and it will build a schedule for you.
                         </div>
                         <div>
-                            <label className="text-xs font-bold text-gray-400 mb-2 flex items-center gap-2"><Tag size={12}/> Topic</label>
-                            <input autoFocus value={props.planTopic} onChange={(e) => props.setPlanTopic(e.target.value)} className="w-full bg-black/50 border border-white/10 rounded-xl p-3 text-sm text-white focus:outline-none focus:border-white/30" placeholder="e.g. Calculus Final" />
+                            <label className="text-xs font-bold text-gray-400 mb-2 flex items-center gap-2">
+                              <Tag size={12}/> Topic
+                            </label>
+                            <input 
+                              autoFocus 
+                              value={props.planTopic} 
+                              onChange={(e) => props.setPlanTopic(e.target.value)} 
+                              className="w-full bg-black/50 border border-white/10 rounded-xl p-3 text-sm text-white focus:outline-none focus:border-blue-500/50 transition-colors" 
+                              placeholder="e.g. Calculus Final" 
+                            />
                         </div>
                         <div className="grid grid-cols-2 gap-4">
                             <div>
-                                <label className="text-xs font-bold text-gray-400 mb-2 flex items-center gap-2"><Target size={12}/> Deadline</label>
-                                <input type="date" value={props.planDate} onChange={(e) => props.setPlanDate(e.target.value)} className="w-full bg-black/50 border border-white/10 rounded-xl p-3 text-sm text-white focus:outline-none focus:border-white/30 cursor-pointer [color-scheme:dark]" />
+                                <label className="text-xs font-bold text-gray-400 mb-2 flex items-center gap-2">
+                                  <Target size={12}/> Deadline
+                                </label>
+                                <input 
+                                  type="date" 
+                                  value={props.planDate} 
+                                  onChange={(e) => props.setPlanDate(e.target.value)} 
+                                  className="w-full bg-black/50 border border-white/10 rounded-xl p-3 text-sm text-white focus:outline-none focus:border-blue-500/50 cursor-pointer [color-scheme:dark] transition-colors" 
+                                />
                             </div>
                             <div>
-                                <label className="text-xs font-bold text-gray-400 mb-2 flex items-center gap-2"><Clock size={12}/> Duration</label>
-                                <input type="number" value={props.planDuration} onChange={(e) => props.setPlanDuration(e.target.value)} className="w-full bg-black/50 border border-white/10 rounded-xl p-3 text-sm text-white focus:outline-none focus:border-white/30" placeholder="Hours" />
+                                <label className="text-xs font-bold text-gray-400 mb-2 flex items-center gap-2">
+                                  <Clock size={12}/> Duration
+                                </label>
+                                <input 
+                                  type="number" 
+                                  value={props.planDuration} 
+                                  onChange={(e) => props.setPlanDuration(e.target.value)} 
+                                  className="w-full bg-black/50 border border-white/10 rounded-xl p-3 text-sm text-white focus:outline-none focus:border-blue-500/50 transition-colors" 
+                                  placeholder="Hours" 
+                                />
                             </div>
                         </div>
                         <div>
-                            <label className="text-xs font-bold text-gray-400 mb-2 flex items-center gap-2"><AlertCircle size={12}/> Goals</label>
-                            <textarea value={props.planGoals} onChange={(e) => props.setPlanGoals(e.target.value)} className="w-full bg-black/50 border border-white/10 rounded-xl p-3 text-sm text-white focus:outline-none focus:border-white/30 resize-none h-24" placeholder="Specific areas to cover..." />
+                            <label className="text-xs font-bold text-gray-400 mb-2 flex items-center gap-2">
+                              <AlertCircle size={12}/> Goals
+                            </label>
+                            <textarea 
+                              value={props.planGoals} 
+                              onChange={(e) => props.setPlanGoals(e.target.value)} 
+                              className="w-full bg-black/50 border border-white/10 rounded-xl p-3 text-sm text-white focus:outline-none focus:border-blue-500/50 resize-none h-24 transition-colors" 
+                              placeholder="Specific areas to cover..." 
+                            />
                         </div>
                         </>
                     ) : (
@@ -575,13 +708,21 @@ const EventModal = React.memo(({ isOpen, isPlanning, isEditing, onClose, onAdd, 
                         <div className="grid grid-cols-2 gap-4">
                             <div>
                             <label className="text-xs font-bold text-gray-400 mb-2">Type</label>
-                            <select value={props.newEventType} onChange={(e) => props.setNewEventType(e.target.value)} className="w-full bg-black/50 border border-white/10 rounded-xl p-3 text-sm text-white focus:outline-none focus:border-white/30 cursor-pointer [color-scheme:dark]">
+                            <select 
+                              value={props.newEventType} 
+                              onChange={(e) => props.setNewEventType(e.target.value)} 
+                              className="w-full bg-black/50 border border-white/10 rounded-xl p-3 text-sm text-white focus:outline-none focus:border-blue-500/50 cursor-pointer [color-scheme:dark] transition-colors"
+                            >
                                 {eventTypes.map(t => <option key={t.value} value={t.value}>{t.label}</option>)}
                             </select>
                             </div>
                             <div>
                             <label className="text-xs font-bold text-gray-400 mb-2">Priority</label>
-                            <select value={props.newEventPriority} onChange={(e) => props.setNewEventPriority(e.target.value)} className="w-full bg-black/50 border border-white/10 rounded-xl p-3 text-sm text-white focus:outline-none focus:border-white/30 cursor-pointer [color-scheme:dark]">
+                            <select 
+                              value={props.newEventPriority} 
+                              onChange={(e) => props.setNewEventPriority(e.target.value)} 
+                              className="w-full bg-black/50 border border-white/10 rounded-xl p-3 text-sm text-white focus:outline-none focus:border-blue-500/50 cursor-pointer [color-scheme:dark] transition-colors"
+                            >
                                 <option value="low">Low</option>
                                 <option value="medium">Medium</option>
                                 <option value="high">High</option>
@@ -595,14 +736,19 @@ const EventModal = React.memo(({ isOpen, isPlanning, isEditing, onClose, onAdd, 
                                 <button
                                   type="button"
                                   onClick={voiceHandler.isListening ? voiceHandler.stopListening : voiceHandler.startListening}
-                                  className={`p-1 rounded ${voiceHandler.isListening ? 'bg-red-500/20 text-red-400 animate-pulse' : 'bg-white/5 text-gray-400 hover:text-white'}`}
+                                  className={`p-1.5 rounded-lg transition-all ${voiceHandler.isListening ? 'bg-red-500/20 text-red-400 animate-pulse' : 'bg-white/5 text-gray-400 hover:text-white hover:bg-white/10'}`}
                                   title={voiceHandler.isListening ? "Stop listening" : "Voice input"}
                                 >
                                   {voiceHandler.isListening ? <MicOff size={12} /> : <Mic size={12} />}
                                 </button>
                               )}
                             </label>
-                            <input value={props.newEventTitle} onChange={(e) => props.setNewEventTitle(e.target.value)} className="w-full bg-black/50 border border-white/10 rounded-xl p-3 text-sm text-white focus:outline-none focus:border-white/30" placeholder="Event name..." />
+                            <input 
+                              value={props.newEventTitle} 
+                              onChange={(e) => props.setNewEventTitle(e.target.value)} 
+                              className="w-full bg-black/50 border border-white/10 rounded-xl p-3 text-sm text-white focus:outline-none focus:border-blue-500/50 transition-colors" 
+                              placeholder="Event name..." 
+                            />
                         </div>
                         <div className="grid grid-cols-2 gap-4">
                             <div>
@@ -613,7 +759,7 @@ const EventModal = React.memo(({ isOpen, isPlanning, isEditing, onClose, onAdd, 
                               type="date" 
                               value={props.newEventDate} 
                               onChange={(e) => props.setNewEventDate(e.target.value)} 
-                              className="w-full bg-black/50 border border-white/10 rounded-xl p-3 text-sm text-white focus:outline-none focus:border-white/30 cursor-pointer [color-scheme:dark] hover:border-white/30 transition-colors" 
+                              className="w-full bg-black/50 border border-white/10 rounded-xl p-3 text-sm text-white focus:outline-none focus:border-blue-500/50 cursor-pointer [color-scheme:dark] hover:border-white/30 transition-colors" 
                             />
                             </div>
                             <div>
@@ -624,37 +770,54 @@ const EventModal = React.memo(({ isOpen, isPlanning, isEditing, onClose, onAdd, 
                               type="time" 
                               value={props.newEventTime} 
                               onChange={(e) => props.setNewEventTime(e.target.value)} 
-                              className="w-full bg-black/50 border border-white/10 rounded-xl p-3 text-sm text-white focus:outline-none focus:border-white/30 cursor-pointer [color-scheme:dark] hover:border-white/30 transition-colors" 
+                              className="w-full bg-black/50 border border-white/10 rounded-xl p-3 text-sm text-white focus:outline-none focus:border-blue-500/50 cursor-pointer [color-scheme:dark] hover:border-white/30 transition-colors" 
                             />
                             </div>
                         </div>
                         <div>
                             <label className="text-xs font-bold text-gray-400 mb-2">Notes</label>
-                            <textarea value={props.newEventNotes} onChange={(e) => props.setNewEventNotes(e.target.value)} className="w-full bg-black/50 border border-white/10 rounded-xl p-3 text-sm text-white focus:outline-none focus:border-white/30 resize-none h-20" placeholder="Add details..." />
+                            <textarea 
+                              value={props.newEventNotes} 
+                              onChange={(e) => props.setNewEventNotes(e.target.value)} 
+                              className="w-full bg-black/50 border border-white/10 rounded-xl p-3 text-sm text-white focus:outline-none focus:border-blue-500/50 resize-none h-20 transition-colors" 
+                              placeholder="Add details..." 
+                            />
                         </div>
                         </>
                     )}
                     </div>
 
-                    <div className="p-5 border-t border-white/10 bg-[#151515] rounded-b-2xl flex justify-end gap-3">
-                    <button onClick={() => isEditing && !isPlanning ? setIsEditingState(false) : onClose()} className="px-4 py-2 text-sm text-gray-400 hover:text-white transition-colors" disabled={isLoading}>Cancel</button>
+                    <div className="p-5 border-t border-white/10 bg-gradient-to-r from-[#151515] to-[#111] rounded-b-2xl flex justify-end gap-3">
+                    <button 
+                      onClick={() => isEditing && !isPlanning ? setIsEditingState(false) : onClose()} 
+                      className="px-4 py-2 text-sm text-gray-400 hover:text-white transition-all font-medium" 
+                      disabled={isLoading}
+                    >
+                      Cancel
+                    </button>
                     <button 
                         onClick={isPlanning ? onGenerate : (isEditing ? onUpdate : onAdd)} 
                         disabled={isLoading || (isPlanning ? !props.planTopic : !props.newEventTitle)} 
-                        className={`px-6 py-2 rounded-xl text-sm font-bold transition-all flex items-center gap-2 ${
+                        className={`px-6 py-2 rounded-xl text-sm font-bold transition-all flex items-center gap-2 disabled:opacity-50 disabled:cursor-not-allowed ${
                             isPlanning 
-                                ? `${theme.primaryBg} text-white hover:opacity-90` 
-                                : 'bg-white !text-black hover:bg-gray-200' 
+                                ? `${theme.primaryBg} text-white hover:brightness-110` 
+                                : 'bg-gradient-to-r from-white to-gray-100 text-black hover:from-gray-100 hover:to-white' 
                         }`}
                     >
-                        {isLoading ? <Sparkles size={14} className="animate-spin" /> : isPlanning ? <Sparkles size={14}/> : <CheckCircle2 size={14}/>}
+                        {isLoading ? (
+                          <Sparkles size={14} className="animate-spin" />
+                        ) : isPlanning ? (
+                          <Sparkles size={14}/>
+                        ) : (
+                          <CheckCircle2 size={14}/>
+                        )}
                         {isPlanning ? (isLoading ? 'Creating Plan...' : 'Generate Plan') : (isEditing ? 'Save Changes' : 'Save Event')}
                     </button>
                     </div>
                 </>
             )}
           </motion.div>
-        </div>
+        </motion.div>
       </AnimatePresence>
     );
 });
@@ -779,6 +942,7 @@ export const Chronos = React.memo(() => {
     if (newEventTitle && newEventDate) {
       addEvent(newEventTitle, newEventDate, newEventType, newEventPriority, newEventNotes, newEventTime);
       closeModal();
+      showNotification(`Event "${newEventTitle}" created successfully`);
     }
   };
 
@@ -793,6 +957,7 @@ export const Chronos = React.memo(() => {
             notes: newEventNotes
         });
         closeModal();
+        showNotification(`Event "${newEventTitle}" updated`);
     } else {
         if(deleteEvent) deleteEvent(editingEvent.id);
         addEvent(newEventTitle, newEventDate, newEventType, newEventPriority, newEventNotes, newEventTime);
@@ -802,8 +967,10 @@ export const Chronos = React.memo(() => {
 
   const handleDelete = () => {
     if (editingEvent && deleteEvent) {
+        const title = editingEvent.title;
         deleteEvent(editingEvent.id);
         closeModal();
+        showNotification(`Event "${title}" deleted`);
     } else {
         console.error("Delete function missing");
         closeModal();
@@ -814,6 +981,7 @@ export const Chronos = React.memo(() => {
     if (planTopic && planDate) {
       generateSchedule(planTopic, planDate, planDuration, planGoals, "");
       closeModal();
+      showNotification(`Generating plan for "${planTopic}"...`);
     }
   };
 
@@ -866,22 +1034,29 @@ export const Chronos = React.memo(() => {
     <div className="flex-1 h-full flex flex-col p-6 bg-[#030304] overflow-hidden relative">
       <div className="max-w-[1600px] w-full mx-auto h-full flex flex-col">
         
+        {/* Notification */}
         <AnimatePresence>
             {notification && (
                 <motion.div 
-                    initial={{ y: 50, opacity: 0 }}
-                    animate={{ y: 0, opacity: 1 }}
-                    exit={{ y: 50, opacity: 0 }}
-                    className="absolute bottom-10 left-1/2 -translate-x-1/2 z-50 bg-[#151515] border border-green-500/30 text-green-400 px-4 py-2 rounded-full shadow-2xl flex items-center gap-2 text-sm font-bold"
+                    initial={{ y: 50, opacity: 0, scale: 0.9 }}
+                    animate={{ y: 0, opacity: 1, scale: 1 }}
+                    exit={{ y: 50, opacity: 0, scale: 0.9 }}
+                    className="fixed bottom-10 left-1/2 -translate-x-1/2 z-[60] bg-gradient-to-r from-[#151515] to-[#111] border border-green-500/30 text-green-400 px-6 py-3 rounded-2xl shadow-2xl flex items-center gap-3 text-sm font-bold backdrop-blur-xl"
                 >
-                    <CheckCircle2 size={16} /> {notification}
+                    <CheckCircle2 size={18} className="flex-shrink-0" /> 
+                    {notification}
                 </motion.div>
             )}
         </AnimatePresence>
 
-        <div className="mb-6 relative group z-20">
-            <div className="absolute inset-y-0 left-3 flex items-center pointer-events-none text-gray-500 group-focus-within:text-blue-400 transition-colors">
-                <Sparkles size={16} className={naturalInput ? "animate-pulse text-blue-400" : ""} />
+        {/* Command Bar */}
+        <motion.div 
+          initial={{ opacity: 0, y: -10 }}
+          animate={{ opacity: 1, y: 0 }}
+          className="mb-6 relative group z-20"
+        >
+            <div className="absolute inset-y-0 left-4 flex items-center pointer-events-none text-gray-500 group-focus-within:text-blue-400 transition-colors">
+                <Sparkles size={18} className={naturalInput ? "animate-pulse text-blue-400" : ""} />
             </div>
             <input 
                 type="text" 
@@ -889,62 +1064,130 @@ export const Chronos = React.memo(() => {
                 onChange={(e) => setNaturalInput(e.target.value)}
                 onKeyDown={handleNaturalSubmit}
                 placeholder="Ask Chronos: 'Plan sprint for Physics', 'Meeting on Friday', or 'Call Mom at 5pm'..."
-                className="w-full bg-[#0A0A0A] border border-white/10 rounded-xl py-3 pl-10 pr-24 text-sm text-white focus:outline-none focus:border-blue-500/50 transition-all shadow-inner placeholder-gray-600"
+                className="w-full bg-gradient-to-r from-[#0A0A0A] to-[#0C0C0C] border border-white/10 rounded-2xl py-4 pl-12 pr-28 text-sm text-white focus:outline-none focus:border-blue-500/50 focus:ring-2 focus:ring-blue-500/20 transition-all shadow-lg placeholder-gray-600"
             />
-            <div className="absolute right-3 top-1/2 -translate-y-1/2 flex items-center gap-2">
+            <div className="absolute right-4 top-1/2 -translate-y-1/2 flex items-center gap-2">
               {voiceHandler.isSupported && (
                 <button
                   onClick={voiceHandler.isListening ? voiceHandler.stopListening : voiceHandler.startListening}
-                  className={`p-1.5 rounded-lg transition-all ${
+                  className={`p-2 rounded-lg transition-all ${
                     voiceHandler.isListening 
                       ? 'bg-red-500/20 text-red-400 animate-pulse' 
                       : 'bg-white/5 text-gray-500 hover:text-white hover:bg-white/10'
                   }`}
                   title={voiceHandler.isListening ? "Stop listening" : "Voice input"}
                 >
-                  {voiceHandler.isListening ? <MicOff size={14} /> : <Mic size={14} />}
+                  {voiceHandler.isListening ? <MicOff size={16} /> : <Mic size={16} />}
                 </button>
               )}
-              <div className="text-[10px] text-gray-600 border border-white/5 px-1.5 rounded opacity-50 group-focus-within:opacity-100 transition-opacity">ENTER</div>
+              <div className="text-[10px] text-gray-600 border border-white/10 px-2 py-1 rounded-lg opacity-50 group-focus-within:opacity-100 transition-opacity font-mono font-bold">
+                ENTER
+              </div>
             </div>
-        </div>
+        </motion.div>
 
-        <div className="flex items-center justify-between pb-4 border-b border-white/5 flex-shrink-0 mb-4 z-10">
+        {/* Header */}
+        <motion.div 
+          initial={{ opacity: 0 }}
+          animate={{ opacity: 1 }}
+          className="flex items-center justify-between pb-5 border-b border-white/10 flex-shrink-0 mb-5 z-10"
+        >
           <div className="flex items-center gap-4">
-            <h1 className="text-2xl font-bold text-white tracking-tight">
-              {currentDate.toLocaleString('default', { month: 'long', year: 'numeric' })}
-            </h1>
-            <div className="flex bg-[#111] rounded-lg border border-white/10 p-0.5">
-              <button onClick={() => changeDate(-1)} className="p-1 hover:text-white text-gray-500 rounded hover:bg-white/5"><ChevronLeft size={16}/></button>
-              <button onClick={() => setCurrentDate(new Date())} className="px-2 text-xs font-bold text-gray-400 hover:text-white">Today</button>
-              <button onClick={() => changeDate(1)} className="p-1 hover:text-white text-gray-500 rounded hover:bg-white/5"><ChevronRight size={16}/></button>
+            <div className="flex items-center gap-3">
+              <div className={`p-3 rounded-xl ${theme.softBg} ${theme.accentText} shadow-lg`}>
+                <CalendarIcon size={20} />
+              </div>
+              <div>
+                <h1 className="text-2xl font-bold text-white tracking-tight">
+                  {currentDate.toLocaleString('default', { month: 'long', year: 'numeric' })}
+                </h1>
+                <p className="text-xs text-gray-500 font-medium mt-0.5">
+                  {calendarEvents.length} event{calendarEvents.length !== 1 ? 's' : ''} scheduled
+                </p>
+              </div>
+            </div>
+            <div className="flex bg-gradient-to-r from-[#111] to-[#0F0F0F] rounded-xl border border-white/10 p-1 shadow-lg">
+              <button 
+                onClick={() => changeDate(-1)} 
+                className="p-2 hover:text-white text-gray-500 rounded-lg hover:bg-white/10 transition-all"
+              >
+                <ChevronLeft size={16}/>
+              </button>
+              <button 
+                onClick={() => setCurrentDate(new Date())} 
+                className="px-3 text-xs font-bold text-gray-400 hover:text-white transition-colors"
+              >
+                Today
+              </button>
+              <button 
+                onClick={() => changeDate(1)} 
+                className="p-2 hover:text-white text-gray-500 rounded-lg hover:bg-white/10 transition-all"
+              >
+                <ChevronRight size={16}/>
+              </button>
             </div>
           </div>
 
           <div className="flex gap-2">
-            <div className="flex bg-[#111] rounded-lg border border-white/10 p-0.5 mr-2">
-                <button onClick={() => setViewMode('month')} className={`px-3 py-1 rounded-md text-xs font-medium transition-all flex items-center gap-2 ${viewMode === 'month' ? 'bg-white/10 text-white' : 'text-gray-500'}`}><Grid size={12}/> Month</button>
-                <button onClick={() => setViewMode('week')} className={`px-3 py-1 rounded-md text-xs font-medium transition-all flex items-center gap-2 ${viewMode === 'week' ? 'bg-white/10 text-white' : 'text-gray-500'}`}><Layout size={12}/> Week</button>
+            <div className="flex bg-gradient-to-r from-[#111] to-[#0F0F0F] rounded-xl border border-white/10 p-1 mr-2 shadow-lg">
+                <button 
+                  onClick={() => setViewMode('month')} 
+                  className={`px-4 py-2 rounded-lg text-xs font-bold transition-all flex items-center gap-2 ${
+                    viewMode === 'month' ? 'bg-white/10 text-white shadow-inner' : 'text-gray-500 hover:text-white'
+                  }`}
+                >
+                  <Grid size={14}/> Month
+                </button>
+                <button 
+                  onClick={() => setViewMode('week')} 
+                  className={`px-4 py-2 rounded-lg text-xs font-bold transition-all flex items-center gap-2 ${
+                    viewMode === 'week' ? 'bg-white/10 text-white shadow-inner' : 'text-gray-500 hover:text-white'
+                  }`}
+                >
+                  <Layout size={14}/> Week
+                </button>
             </div>
             
-            <button onClick={handleImportICS} className="p-2 bg-[#111] border border-white/10 rounded-lg text-gray-400 hover:text-white" title="Import Calendar (.ics)"><Upload size={14}/></button>
-            <button onClick={() => generateICS(calendarEvents)} className="p-2 bg-[#111] border border-white/10 rounded-lg text-gray-400 hover:text-white" title="Export ICS"><Download size={14}/></button>
+            <button 
+              onClick={handleImportICS} 
+              className="p-2.5 bg-gradient-to-r from-[#111] to-[#0F0F0F] border border-white/10 rounded-xl text-gray-400 hover:text-white transition-all hover:scale-105 shadow-lg" 
+              title="Import Calendar (.ics)"
+            >
+              <Upload size={16}/>
+            </button>
+            <button 
+              onClick={() => generateICS(calendarEvents)} 
+              className="p-2.5 bg-gradient-to-r from-[#111] to-[#0F0F0F] border border-white/10 rounded-xl text-gray-400 hover:text-white transition-all hover:scale-105 shadow-lg" 
+              title="Export ICS"
+            >
+              <Download size={16}/>
+            </button>
             
-            <button onClick={() => openNewEvent(formatDate(new Date()))} className="flex items-center gap-2 px-3 py-1.5 bg-white text-black hover:bg-gray-200 rounded-lg text-xs font-bold">
-                <Plus size={12}/> Add
+            <button 
+              onClick={() => openNewEvent(formatDate(new Date()))} 
+              className="flex items-center gap-2 px-5 py-2.5 bg-gradient-to-r from-white to-gray-100 text-black hover:from-gray-100 hover:to-white rounded-xl text-xs font-bold transition-all hover:scale-105 shadow-lg"
+            >
+                <Plus size={14}/> Add Event
             </button>
           </div>
-        </div>
+        </motion.div>
 
+        {/* Calendar View */}
         <div className="flex-1 min-h-0 relative z-0">
           {viewMode === 'month' ? (
-            <div className="h-full flex flex-col">
-                <div className="grid grid-cols-7 gap-px mb-2">
-                  {['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'].map(d => (
-                    <div key={d} className="text-center text-[10px] font-bold text-gray-500 uppercase tracking-wider">{d}</div>
+            <motion.div 
+              initial={{ opacity: 0 }}
+              animate={{ opacity: 1 }}
+              className="h-full flex flex-col"
+            >
+                <div className="grid grid-cols-7 gap-px mb-3">
+                  {['Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday'].map(d => (
+                    <div key={d} className="text-center text-[10px] font-bold text-gray-500 uppercase tracking-widest py-2">
+                      {d.slice(0, 3)}
+                    </div>
                   ))}
                 </div>
-                <div className="flex-1 grid grid-cols-7 grid-rows-5 gap-2">
+                <div className="flex-1 grid grid-cols-7 grid-rows-5 gap-3">
                   {calendarDays.map((day, i) => {
                     const dateStr = day ? formatDate(new Date(currentDate.getFullYear(), currentDate.getMonth(), day)) : `empty-${i}`;
                     const events = eventsByDate[dateStr] || [];
@@ -963,18 +1206,24 @@ export const Chronos = React.memo(() => {
                     );
                   })}
                 </div>
-            </div>
+            </motion.div>
           ) : (
-             <WeekView 
-                currentDate={currentDate} 
-                eventsByDate={eventsByDate} 
-                theme={{...theme, isDev: settings.developerMode}} 
-                onEventClick={openEditEvent}
-             />
+             <motion.div
+               initial={{ opacity: 0 }}
+               animate={{ opacity: 1 }}
+             >
+               <WeekView 
+                  currentDate={currentDate} 
+                  eventsByDate={eventsByDate} 
+                  theme={{...theme, isDev: settings.developerMode}} 
+                  onEventClick={openEditEvent}
+               />
+             </motion.div>
           )}
         </div>
       </div>
 
+      {/* Event Modal */}
       <EventModal
         isOpen={isModalOpen}
         isPlanning={isPlanning}

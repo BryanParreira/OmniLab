@@ -3,7 +3,7 @@ import { useLumina } from '../context/LuminaContext.jsx';
 import { 
   Plus, MessageSquare, Trash2, Folder, Settings as SettingsIcon, 
   Sliders, Edit2, Check, Calendar, X, Brain, Layout, PenTool,
-  Clock, AlertCircle, Home
+  Clock, AlertCircle, Home, ChevronDown, Pin, Search
 } from 'lucide-react';
 import { motion, AnimatePresence } from 'framer-motion';
 
@@ -29,15 +29,25 @@ const TabButton = ({ icon: Icon, active, onClick, title }) => (
   </button>
 );
 
+// --- SKELETON LOADER ---
+const SkeletonLoader = () => (
+  <div className="space-y-2 animate-pulse">
+    {[1, 2, 3].map(i => (
+      <div key={i} className="h-10 bg-white/5 rounded-lg" />
+    ))}
+  </div>
+);
+
 export const Sidebar = () => {
   const { 
     sessions, sessionId, loadSession, startNewChat, deleteSession, renameChat, openGlobalSettings,
     projects, activeProject, setActiveProject, createProject, deleteProject, updateProjectSettings,
     setCurrentView, currentView, theme, settings,
-    calendarEvents
+    calendarEvents,
+    pinSession, unpinSession
   } = useLumina();
 
-  const [activeTab, setActiveTab] = useState('home'); // Changed default to 'home'
+  const [activeTab, setActiveTab] = useState('home');
   
   // State for Lists
   const [isCreatingProj, setIsCreatingProj] = useState(false);
@@ -47,6 +57,12 @@ export const Sidebar = () => {
   const [editingSessionId, setEditingSessionId] = useState(null);
   const [renameValue, setRenameValue] = useState("");
   const [isLoading, setIsLoading] = useState(false);
+  
+  // Search/Filter state
+  const [searchQuery, setSearchQuery] = useState("");
+  
+  // Collapsible sections
+  const [collapsedSections, setCollapsedSections] = useState(new Set());
 
   // --- GET TODAY'S EVENTS ---
   const todaysEvents = useMemo(() => {
@@ -62,6 +78,59 @@ export const Sidebar = () => {
       .filter(e => e.date === todayStr)
       .sort((a, b) => (a.time || '23:59').localeCompare(b.time || '23:59'));
   }, [calendarEvents]);
+
+  // --- GROUP SESSIONS BY DATE ---
+  const groupedSessions = useMemo(() => {
+    const groups = { 
+      pinned: [], 
+      today: [], 
+      yesterday: [], 
+      older: [] 
+    };
+    const now = new Date();
+    
+    sessions.forEach(session => {
+      if (session.pinned) {
+        groups.pinned.push(session);
+        return;
+      }
+      
+      const sessionDate = new Date(session.date);
+      const daysDiff = Math.floor((now - sessionDate) / (1000 * 60 * 60 * 24));
+      
+      if (daysDiff === 0) groups.today.push(session);
+      else if (daysDiff === 1) groups.yesterday.push(session);
+      else groups.older.push(session);
+    });
+    
+    return groups;
+  }, [sessions]);
+
+  // --- FILTER SESSIONS ---
+  const filteredGroupedSessions = useMemo(() => {
+    if (!searchQuery.trim()) return groupedSessions;
+    
+    const query = searchQuery.toLowerCase();
+    const filtered = {};
+    
+    Object.entries(groupedSessions).forEach(([group, items]) => {
+      filtered[group] = items.filter(session => 
+        (session.title || 'Untitled').toLowerCase().includes(query)
+      );
+    });
+    
+    return filtered;
+  }, [groupedSessions, searchQuery]);
+
+  // --- FILTER PROJECTS ---
+  const filteredProjects = useMemo(() => {
+    if (!searchQuery.trim()) return projects;
+    
+    const query = searchQuery.toLowerCase();
+    return projects.filter(proj => 
+      proj.name.toLowerCase().includes(query)
+    );
+  }, [projects, searchQuery]);
 
   // --- STATS FOR HOME TAB ---
   const stats = useMemo(() => {
@@ -83,6 +152,7 @@ export const Sidebar = () => {
   // --- TAB SWITCHER LOGIC ---
   const switchTab = useCallback((tab) => {
     setActiveTab(tab);
+    setSearchQuery(""); // Clear search when switching tabs
     
     if (tab === 'home') {
       setCurrentView('home');
@@ -94,7 +164,6 @@ export const Sidebar = () => {
       setCurrentView('zenith');
     } else if (tab === 'projects') {
       // When clicking projects tab, just show the projects list in sidebar
-      // User can click on a project to open dashboard
     } else if (tab === 'chats') {
       setCurrentView('chat');
     }
@@ -103,30 +172,76 @@ export const Sidebar = () => {
   // --- ACTIONS ---
   const handleCreateProject = useCallback(async () => {
     if (!newProjName.trim()) return;
-    try { setIsLoading(true); await createProject(newProjName); setNewProjName(""); setIsCreatingProj(false); } 
-    catch (error) { console.error(error); } finally { setIsLoading(false); }
+    try { 
+      setIsLoading(true); 
+      await createProject(newProjName); 
+      setNewProjName(""); 
+      setIsCreatingProj(false); 
+    } catch (error) { 
+      console.error(error); 
+    } finally { 
+      setIsLoading(false); 
+    }
   }, [newProjName, createProject]);
 
   const saveProjectSettings = useCallback(async () => {
     if (!editingProject) return;
-    try { setIsLoading(true); await updateProjectSettings(tempSystemPrompt); setEditingProject(null); } 
-    catch (error) { console.error(error); } finally { setIsLoading(false); }
+    try { 
+      setIsLoading(true); 
+      await updateProjectSettings(tempSystemPrompt); 
+      setEditingProject(null); 
+    } catch (error) { 
+      console.error(error); 
+    } finally { 
+      setIsLoading(false); 
+    }
   }, [tempSystemPrompt, updateProjectSettings, editingProject]);
 
   const submitRename = useCallback(async (e) => {
     e.stopPropagation();
     if (!renameValue.trim()) return;
-    try { setIsLoading(true); await renameChat(editingSessionId, renameValue); setEditingSessionId(null); } 
-    catch (error) { console.error(error); } finally { setIsLoading(false); }
+    try { 
+      setIsLoading(true); 
+      await renameChat(editingSessionId, renameValue); 
+      setEditingSessionId(null); 
+    } catch (error) { 
+      console.error(error); 
+    } finally { 
+      setIsLoading(false); 
+    }
   }, [renameValue, editingSessionId, renameChat]);
 
   const handleProjectClick = useCallback((proj) => {
     setActiveProject(proj);
-    setCurrentView('dashboard'); // Always go to dashboard for both modes
+    setCurrentView('dashboard');
   }, [setActiveProject, setCurrentView]);
 
-  const handleChatClick = useCallback((id) => { loadSession(id); setCurrentView('chat'); }, [loadSession, setCurrentView]);
-  const handleNewChat = useCallback(() => { startNewChat(); setCurrentView('chat'); }, [startNewChat, setCurrentView]);
+  const handleChatClick = useCallback((id) => { 
+    loadSession(id); 
+    setCurrentView('chat'); 
+  }, [loadSession, setCurrentView]);
+  
+  const handleNewChat = useCallback(() => { 
+    startNewChat(); 
+    setCurrentView('chat'); 
+  }, [startNewChat, setCurrentView]);
+
+  const toggleSection = useCallback((section) => {
+    setCollapsedSections(prev => {
+      const newSet = new Set(prev);
+      newSet.has(section) ? newSet.delete(section) : newSet.add(section);
+      return newSet;
+    });
+  }, []);
+
+  const handlePinToggle = useCallback((e, sessionId, isPinned) => {
+    e.stopPropagation();
+    if (isPinned) {
+      unpinSession?.(sessionId);
+    } else {
+      pinSession?.(sessionId);
+    }
+  }, [pinSession, unpinSession]);
 
   return (
     <div className="flex flex-col h-full rounded-2xl glass-panel overflow-hidden transition-colors duration-500 bg-[#050505]/80 backdrop-blur-xl border border-white/5">
@@ -189,45 +304,138 @@ export const Sidebar = () => {
           <>
             <button 
               onClick={handleNewChat} 
-              className={`group flex w-full items-center justify-center gap-2 rounded-lg border border-white/5 bg-white/5 hover:bg-white/10 text-gray-300 hover:text-white px-3 py-2 text-[10px] font-bold uppercase tracking-wider transition-all mb-3`}
+              className={`group flex w-full items-center justify-between gap-2 rounded-lg border border-white/5 bg-white/5 hover:bg-white/10 text-gray-300 hover:text-white px-3 py-2 text-[10px] font-bold uppercase tracking-wider transition-all mb-3`}
             >
-              <Plus size={10} className={theme.accentText} />
-              New Session
+              <div className="flex items-center gap-2">
+                <Plus size={10} className={theme.accentText} />
+                New Session
+              </div>
+              <kbd className="text-[8px] text-gray-700 font-mono">⌘N</kbd>
             </button>
-            <div className="space-y-1">
-              {sessions.map(session => (
-                <div 
-                  key={session.id} 
-                  onClick={() => handleChatClick(session.id)} 
-                  className={`group relative flex cursor-pointer items-center justify-between rounded-lg px-3 py-2.5 transition-all duration-200 border border-transparent ${
-                    sessionId === session.id 
-                      ? `${theme.softBg} text-white border-white/5 shadow-md` 
-                      : 'text-gray-500 hover:bg-white/5 hover:text-gray-300'
-                  }`}
+
+            {/* Search Filter */}
+            <div className="mb-3 relative">
+              <Search size={12} className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-600" />
+              <input
+                value={searchQuery}
+                onChange={(e) => setSearchQuery(e.target.value)}
+                placeholder="Filter chats..."
+                className="w-full bg-black/30 border border-white/5 rounded-lg pl-8 pr-8 py-1.5 text-[10px] text-white placeholder-gray-600 focus:border-white/20 focus:outline-none transition-colors"
+              />
+              {searchQuery && (
+                <button 
+                  onClick={() => setSearchQuery("")}
+                  className="absolute right-3 top-1/2 -translate-y-1/2 text-gray-600 hover:text-white transition-colors"
                 >
-                  <div className="flex items-center gap-2 truncate flex-1">
-                    {editingSessionId === session.id ? (
-                      <div className="flex items-center gap-1 flex-1">
-                        <input 
-                          autoFocus value={renameValue} onChange={(e) => setRenameValue(e.target.value)} 
-                          onKeyDown={(e) => e.key === 'Enter' && submitRename(e)} onClick={(e) => e.stopPropagation()} 
-                          className={`w-full bg-black/50 border rounded px-1 text-[11px] text-white focus:outline-none ${theme.primaryBorder}`}
-                        />
-                        <button onClick={submitRename} className="text-green-500 hover:text-green-400"><Check size={12}/></button>
-                      </div>
-                    ) : (
-                      <span className="truncate text-[12px] font-medium">{session.title || "Untitled"}</span>
-                    )}
-                  </div>
-                  {editingSessionId !== session.id && (
-                    <div className="flex gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
-                      <button onClick={(e) => { e.stopPropagation(); setEditingSessionId(session.id); setRenameValue(session.title); }} className="hover:text-white p-1"><Edit2 size={10} /></button>
-                      <button onClick={(e) => { e.stopPropagation(); deleteSession(e, session.id); }} className="hover:text-red-400 p-1"><Trash2 size={10} /></button>
-                    </div>
-                  )}
-                </div>
-              ))}
+                  <X size={10} />
+                </button>
+              )}
             </div>
+
+            {/* Loading State */}
+            {isLoading && <SkeletonLoader />}
+
+            {/* Empty State */}
+            {!isLoading && sessions.length === 0 && (
+              <div className="flex flex-col items-center justify-center py-12 px-4">
+                <MessageSquare size={24} className="text-gray-700 mb-3" />
+                <p className="text-[10px] text-gray-500 mb-3 text-center">
+                  No conversations yet
+                </p>
+                <button 
+                  onClick={handleNewChat}
+                  className="text-[9px] text-indigo-400 hover:text-indigo-300 flex items-center gap-1 transition-colors"
+                >
+                  <Plus size={10} /> Start your first chat
+                </button>
+              </div>
+            )}
+
+            {/* Sessions List with Groups */}
+            {!isLoading && sessions.length > 0 && (
+              <div className="space-y-3">
+                {Object.entries(filteredGroupedSessions).map(([group, items]) => 
+                  items.length > 0 && (
+                    <div key={group}>
+                      <div className="flex items-center gap-2 text-[8px] text-gray-700 uppercase tracking-widest px-2 py-1.5 mb-1">
+                        {group === 'pinned' && <Pin size={8} />}
+                        <span>{group}</span>
+                        <span className="text-gray-800">({items.length})</span>
+                      </div>
+                      <div className="space-y-1">
+                        {items.map(session => (
+                          <div 
+                            key={session.id} 
+                            onClick={() => handleChatClick(session.id)} 
+                            className={`group relative flex cursor-pointer items-center justify-between rounded-lg px-3 py-2.5 transition-all duration-200 border border-transparent ${
+                              sessionId === session.id 
+                                ? `${theme.softBg} text-white border-white/5 shadow-md` 
+                                : 'text-gray-500 hover:bg-white/5 hover:text-gray-300'
+                            }`}
+                          >
+                            <div className="flex items-center gap-2 truncate flex-1">
+                              {editingSessionId === session.id ? (
+                                <div className="flex items-center gap-1 flex-1">
+                                  <input 
+                                    autoFocus 
+                                    value={renameValue} 
+                                    onChange={(e) => setRenameValue(e.target.value)} 
+                                    onKeyDown={(e) => e.key === 'Enter' && submitRename(e)} 
+                                    onClick={(e) => e.stopPropagation()} 
+                                    className={`w-full bg-black/50 border rounded px-1 text-[11px] text-white focus:outline-none ${theme.primaryBorder}`}
+                                  />
+                                  <button 
+                                    onClick={submitRename} 
+                                    className="text-green-500 hover:text-green-400"
+                                  >
+                                    <Check size={12}/>
+                                  </button>
+                                </div>
+                              ) : (
+                                <span className="truncate text-[12px] font-medium">
+                                  {session.title || "Untitled"}
+                                </span>
+                              )}
+                            </div>
+                            {editingSessionId !== session.id && (
+                              <div className="flex gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
+                                <button 
+                                  onClick={(e) => handlePinToggle(e, session.id, session.pinned)} 
+                                  className={`hover:text-white p-1 ${session.pinned ? 'text-indigo-400' : ''}`}
+                                  title={session.pinned ? "Unpin" : "Pin"}
+                                >
+                                  <Pin size={10} />
+                                </button>
+                                <button 
+                                  onClick={(e) => { 
+                                    e.stopPropagation(); 
+                                    setEditingSessionId(session.id); 
+                                    setRenameValue(session.title); 
+                                  }} 
+                                  className="hover:text-white p-1"
+                                >
+                                  <Edit2 size={10} />
+                                </button>
+                                <button 
+                                  onClick={(e) => { 
+                                    e.stopPropagation(); 
+                                    deleteSession(e, session.id); 
+                                  }} 
+                                  className="hover:text-red-400 p-1"
+                                >
+                                  <Trash2 size={10} />
+                                </button>
+                              </div>
+                            )}
+                          </div>
+                        ))}
+                      </div>
+                      {group !== 'older' && <div className="h-px bg-white/5 my-2" />}
+                    </div>
+                  )
+                )}
+              </div>
+            )}
           </>
         )}
 
@@ -244,42 +452,127 @@ export const Sidebar = () => {
             ) : (
               <div className="mb-3 p-2 bg-[#111] rounded-lg border border-white/10 animate-in fade-in slide-in-from-top-2">
                 <input 
-                  autoFocus value={newProjName} onChange={(e) => setNewProjName(e.target.value)} 
+                  autoFocus 
+                  value={newProjName} 
+                  onChange={(e) => setNewProjName(e.target.value)} 
                   onKeyDown={(e) => e.key === 'Enter' && handleCreateProject()} 
-                  placeholder="Context Name..." className="w-full bg-transparent text-white text-[11px] outline-none mb-2"
+                  placeholder="Context Name..." 
+                  className="w-full bg-transparent text-white text-[11px] outline-none mb-2"
                 />
                 <div className="flex gap-2 justify-end">
-                  <button onClick={() => setIsCreatingProj(false)} className="text-[9px] text-gray-500 hover:text-white">Cancel</button>
-                  <button onClick={handleCreateProject} className={`text-[9px] px-2 py-0.5 rounded text-white ${theme.primaryBg}`}>Create</button>
+                  <button 
+                    onClick={() => setIsCreatingProj(false)} 
+                    className="text-[9px] text-gray-500 hover:text-white"
+                  >
+                    Cancel
+                  </button>
+                  <button 
+                    onClick={handleCreateProject} 
+                    className={`text-[9px] px-2 py-0.5 rounded text-white ${theme.primaryBg}`}
+                  >
+                    Create
+                  </button>
                 </div>
               </div>
             )}
-            <div className="space-y-2">
-              {projects.map(proj => (
-                <div 
-                  key={proj.id} onClick={() => handleProjectClick(proj)} 
-                  className={`group rounded-lg border p-3 cursor-pointer transition-all ${
-                    activeProject?.id === proj.id 
-                      ? `${theme.softBg} ${theme.primaryBorder}` 
-                      : 'bg-black/20 border-white/5 hover:border-white/10'
-                  }`}
+
+            {/* Search Filter */}
+            <div className="mb-3 relative">
+              <Search size={12} className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-600" />
+              <input
+                value={searchQuery}
+                onChange={(e) => setSearchQuery(e.target.value)}
+                placeholder="Filter contexts..."
+                className="w-full bg-black/30 border border-white/5 rounded-lg pl-8 pr-8 py-1.5 text-[10px] text-white placeholder-gray-600 focus:border-white/20 focus:outline-none transition-colors"
+              />
+              {searchQuery && (
+                <button 
+                  onClick={() => setSearchQuery("")}
+                  className="absolute right-3 top-1/2 -translate-y-1/2 text-gray-600 hover:text-white transition-colors"
                 >
-                  <div className="flex justify-between items-center mb-1">
-                    <div className="flex items-center gap-2 text-white font-medium">
-                      <Folder size={12} className={activeProject?.id === proj.id ? theme.accentText : "text-gray-500"} />
-                      <span className="text-[11px]">{proj.name}</span>
-                    </div>
-                    <div className="flex gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
-                      <button onClick={(e) => { e.stopPropagation(); e.preventDefault(); setEditingProject(proj); setTempSystemPrompt(proj.systemPrompt || ""); }} className="text-gray-500 hover:text-white p-1"><Sliders size={10} /></button>
-                      <button onClick={(e) => { e.stopPropagation(); e.preventDefault(); deleteProject(e, proj.id); }} className="text-gray-500 hover:text-red-400 p-1"><Trash2 size={10} /></button>
-                    </div>
-                  </div>
-                  <div className="flex items-center gap-1.5">
-                    <div className="text-[9px] text-gray-600 font-mono">{proj.files?.length || 0} files</div>
-                  </div>
-                </div>
-              ))}
+                  <X size={10} />
+                </button>
+              )}
             </div>
+
+            {/* Loading State */}
+            {isLoading && <SkeletonLoader />}
+
+            {/* Empty State */}
+            {!isLoading && projects.length === 0 && (
+              <div className="flex flex-col items-center justify-center py-12 px-4">
+                <Folder size={24} className="text-gray-700 mb-3" />
+                <p className="text-[10px] text-gray-500 mb-3 text-center">
+                  No contexts created yet
+                </p>
+                <button 
+                  onClick={() => setIsCreatingProj(true)}
+                  className="text-[9px] text-indigo-400 hover:text-indigo-300 flex items-center gap-1 transition-colors"
+                >
+                  <Plus size={10} /> Create your first context
+                </button>
+              </div>
+            )}
+
+            {/* Projects List */}
+            {!isLoading && filteredProjects.length > 0 && (
+              <div className="space-y-2">
+                {filteredProjects.map(proj => (
+                  <div 
+                    key={proj.id} 
+                    onClick={() => handleProjectClick(proj)} 
+                    className={`group rounded-lg border p-3 cursor-pointer transition-all ${
+                      activeProject?.id === proj.id 
+                        ? `${theme.softBg} ${theme.primaryBorder}` 
+                        : 'bg-black/20 border-white/5 hover:border-white/10'
+                    }`}
+                  >
+                    <div className="flex justify-between items-center mb-1">
+                      <div className="flex items-center gap-2 text-white font-medium">
+                        <Folder size={12} className={activeProject?.id === proj.id ? theme.accentText : "text-gray-500"} />
+                        <span className="text-[11px]">{proj.name}</span>
+                      </div>
+                      <div className="flex gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
+                        <button 
+                          onClick={(e) => { 
+                            e.stopPropagation(); 
+                            e.preventDefault(); 
+                            setEditingProject(proj); 
+                            setTempSystemPrompt(proj.systemPrompt || ""); 
+                          }} 
+                          className="text-gray-500 hover:text-white p-1"
+                        >
+                          <Sliders size={10} />
+                        </button>
+                        <button 
+                          onClick={(e) => { 
+                            e.stopPropagation(); 
+                            e.preventDefault(); 
+                            deleteProject(e, proj.id); 
+                          }} 
+                          className="text-gray-500 hover:text-red-400 p-1"
+                        >
+                          <Trash2 size={10} />
+                        </button>
+                      </div>
+                    </div>
+                    <div className="flex items-center gap-2">
+                      <div className="text-[9px] text-gray-600 font-mono">
+                        {proj.files?.length || 0} files
+                      </div>
+                      {proj.files?.length > 0 && (
+                        <div className="w-1 h-1 bg-green-500/50 rounded-full animate-pulse" />
+                      )}
+                      {proj.systemPrompt && (
+                        <div className="text-[8px] text-purple-500/60 border border-purple-500/20 px-1 rounded">
+                          AI
+                        </div>
+                      )}
+                    </div>
+                  </div>
+                ))}
+              </div>
+            )}
           </>
         )}
 
@@ -355,12 +648,16 @@ export const Sidebar = () => {
       <AnimatePresence>
         {editingProject && (
           <motion.div 
-            initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} 
+            initial={{ opacity: 0 }} 
+            animate={{ opacity: 1 }} 
+            exit={{ opacity: 0 }} 
             className="fixed inset-0 bg-black/90 backdrop-blur-sm z-[200] flex items-center justify-center p-4"
             onClick={() => setEditingProject(null)}
           >
             <motion.div
-              initial={{ scale: 0.95 }} animate={{ scale: 1 }} exit={{ scale: 0.95 }}
+              initial={{ scale: 0.95 }} 
+              animate={{ scale: 1 }} 
+              exit={{ scale: 0.95 }}
               className="bg-[#0F0F0F] border border-white/10 rounded-xl w-full max-w-md p-5 shadow-2xl"
               onClick={(e) => e.stopPropagation()}
             >
@@ -368,7 +665,12 @@ export const Sidebar = () => {
                 <h3 className="text-white text-xs font-bold uppercase tracking-wider flex items-center gap-2">
                   <Sliders size={12} className={theme.accentText}/> Project Persona
                 </h3>
-                <button onClick={() => setEditingProject(null)} className="text-gray-500 hover:text-white"><X size={14} /></button>
+                <button 
+                  onClick={() => setEditingProject(null)} 
+                  className="text-gray-500 hover:text-white"
+                >
+                  <X size={14} />
+                </button>
               </div>
               <textarea 
                 value={tempSystemPrompt} 

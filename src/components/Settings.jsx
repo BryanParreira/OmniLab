@@ -543,7 +543,7 @@ export const Settings = ({ isOpen, onClose }) => {
                           <Brain size={40} className="text-white" />
                        </div>
                        <h3 className="text-2xl font-bold text-white tracking-tight">OmniLab</h3>
-                       <p className="text-sm text-gray-500 font-mono mt-1">v1.0.0 • {form.developerMode ? 'Forge' : 'Nexus'} Build</p>
+                       <p className="text-sm text-gray-500 font-mono mt-1"> {form.developerMode ? 'Forge' : 'Nexus'} Build</p>
                        <p className="text-xs text-gray-600 mt-3 max-w-md">
                          A powerful AI-native workspace combining research, development, and productivity tools in one unified experience.
                        </p>

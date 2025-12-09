@@ -4,9 +4,10 @@ import {
   Calendar, Clock, Folder, MessageSquare, Layout, 
   Zap, ArrowRight, Target, Brain, AlertCircle,
   TrendingUp, Activity, Sparkles, ChevronRight,
-  Plus, FileText, Grid
+  Plus, FileText, Grid, BarChart3, Flame, Wind,
+  CheckCircle2, Star, Code2, PenTool
 } from 'lucide-react';
-import { motion } from 'framer-motion';
+import { motion, AnimatePresence } from 'framer-motion';
 
 // --- HELPER: TIME AGO ---
 const getTimeAgo = (date) => {
@@ -17,85 +18,155 @@ const getTimeAgo = (date) => {
   return `${Math.floor(seconds / 86400)}d ago`;
 };
 
-// --- STAT CARD (Minimal Dark Style) ---
-const StatCard = ({ icon: Icon, label, value, trend, onClick, theme }) => (
+// --- STAT CARD (Enhanced) ---
+const StatCard = ({ icon: Icon, label, value, trend, trendUp, onClick, theme, gradient }) => (
   <motion.div
-    whileHover={{ scale: 1.02 }}
+    initial={{ opacity: 0, y: 20 }}
+    animate={{ opacity: 1, y: 0 }}
+    whileHover={{ scale: 1.03, y: -4 }}
+    whileTap={{ scale: 0.98 }}
     onClick={onClick}
-    className="p-5 rounded-xl bg-[#0A0A0A] border border-white/10 hover:border-white/20 cursor-pointer transition-all group relative overflow-hidden"
+    className={`p-6 rounded-2xl bg-gradient-to-br from-[#0A0A0A] to-[#0C0C0C] border border-white/10 hover:border-white/20 cursor-pointer transition-all group relative overflow-hidden shadow-xl`}
   >
-    <div className="flex items-start justify-between mb-4">
-      <div className={`p-2.5 rounded-lg ${theme.softBg} backdrop-blur-sm`}>
-        <Icon size={20} className={theme.accentText} />
-      </div>
-      {trend && (
-        <div className="flex items-center gap-1 text-[10px] text-gray-500 font-mono">
-          <TrendingUp size={10} />
-          <span>{trend}</span>
+    {/* Gradient Glow */}
+    <div className={`absolute top-0 right-0 w-32 h-32 ${gradient} rounded-full blur-3xl opacity-0 group-hover:opacity-20 transition-opacity duration-500`}></div>
+    
+    <div className="relative z-10">
+      <div className="flex items-start justify-between mb-4">
+        <div className={`p-3 rounded-xl ${theme.softBg} backdrop-blur-sm group-hover:scale-110 transition-transform shadow-lg`}>
+          <Icon size={22} className={theme.accentText} />
         </div>
-      )}
+        {trend && (
+          <div className={`flex items-center gap-1 px-2 py-1 rounded-lg text-[10px] font-bold ${
+            trendUp ? 'bg-green-500/10 text-green-400' : 'bg-blue-500/10 text-blue-400'
+          }`}>
+            <TrendingUp size={10} />
+            <span>{trend}</span>
+          </div>
+        )}
+      </div>
+      <div className="space-y-1">
+        <div className="text-3xl font-bold text-white tracking-tight group-hover:text-transparent group-hover:bg-clip-text group-hover:bg-gradient-to-r group-hover:from-white group-hover:to-gray-400 transition-all">
+          {value}
+        </div>
+        <div className="text-xs text-gray-500 uppercase tracking-wider font-bold">{label}</div>
+      </div>
     </div>
-    <div className="space-y-1">
-      <div className="text-3xl font-bold text-white tracking-tight">{value}</div>
-      <div className="text-xs text-gray-500 uppercase tracking-wider font-medium">{label}</div>
-    </div>
-    <div className="absolute bottom-0 left-0 w-full h-0.5 bg-gradient-to-r from-transparent via-white/10 to-transparent opacity-0 group-hover:opacity-100 transition-opacity"></div>
+    
+    {/* Bottom Accent */}
+    <div className={`absolute bottom-0 left-0 w-full h-1 bg-gradient-to-r ${gradient} opacity-0 group-hover:opacity-100 transition-opacity`}></div>
   </motion.div>
 );
 
-// --- TODAY'S EVENT ITEM ---
+// --- TODAY'S EVENT ITEM (Enhanced) ---
 const EventItem = ({ event, index }) => (
   <motion.div
-    initial={{ opacity: 0, x: -10 }}
+    initial={{ opacity: 0, x: -20 }}
     animate={{ opacity: 1, x: 0 }}
     transition={{ delay: index * 0.05 }}
-    className="flex items-center gap-3 p-3 rounded-lg bg-white/5 hover:bg-white/10 transition-colors border border-white/5"
+    whileHover={{ scale: 1.02, x: 4 }}
+    className="flex items-center gap-3 p-4 rounded-xl bg-gradient-to-r from-white/5 to-transparent hover:from-white/10 hover:to-white/5 transition-all border border-white/5 hover:border-white/10 group cursor-pointer"
   >
-    <div className={`w-1 h-12 rounded-full ${
-      event.priority === 'high' ? 'bg-red-500' : 
-      event.priority === 'medium' ? 'bg-amber-500' : 'bg-blue-500'
-    }`}></div>
+    <div className={`w-1.5 h-14 rounded-full ${
+      event.priority === 'high' ? 'bg-gradient-to-b from-red-500 to-red-600' : 
+      event.priority === 'medium' ? 'bg-gradient-to-b from-amber-500 to-orange-600' : 
+      'bg-gradient-to-b from-blue-500 to-purple-600'
+    } shadow-lg`}></div>
     <div className="flex-1 min-w-0">
-      <div className="flex items-center gap-2 mb-1">
-        <span className="text-sm font-semibold text-white truncate">{event.title}</span>
-        {event.priority === 'high' && <AlertCircle size={12} className="text-red-400 shrink-0" />}
+      <div className="flex items-center gap-2 mb-1.5">
+        <span className="text-sm font-bold text-white truncate group-hover:text-transparent group-hover:bg-clip-text group-hover:bg-gradient-to-r group-hover:from-white group-hover:to-gray-400 transition-all">
+          {event.title}
+        </span>
+        {event.priority === 'high' && (
+          <div className="flex items-center gap-1 px-2 py-0.5 rounded-lg bg-red-500/10 border border-red-500/20">
+            <AlertCircle size={10} className="text-red-400" />
+            <span className="text-[9px] font-bold text-red-400 uppercase">Urgent</span>
+          </div>
+        )}
       </div>
       <div className="flex items-center gap-2 text-xs text-gray-500">
         {event.time && (
           <>
             <Clock size={10} />
-            <span className="font-mono">{event.time}</span>
+            <span className="font-mono font-bold">{event.time}</span>
             <span className="text-gray-700">•</span>
           </>
         )}
-        <span className="px-1.5 py-0.5 rounded bg-black/40 uppercase tracking-wider font-bold text-[9px]">
+        <span className="px-2 py-0.5 rounded-lg bg-black/40 border border-white/5 uppercase tracking-wider font-bold text-[9px]">
           {event.type}
         </span>
       </div>
     </div>
+    <ChevronRight size={14} className="text-gray-700 group-hover:text-gray-400 transition-colors" />
   </motion.div>
 );
 
-// --- ACTIVITY ITEM ---
+// --- ACTIVITY ITEM (Enhanced) ---
 const ActivityItem = ({ activity, index }) => {
   const Icon = activity.icon;
   const timeAgo = getTimeAgo(activity.time);
   
   return (
     <motion.div
-      initial={{ opacity: 0, x: -10 }}
+      initial={{ opacity: 0, x: -20 }}
       animate={{ opacity: 1, x: 0 }}
       transition={{ delay: index * 0.05 }}
-      className="flex items-center gap-3 p-2.5 rounded-lg hover:bg-white/5 transition-colors"
+      whileHover={{ x: 4 }}
+      className="flex items-center gap-3 p-3 rounded-lg hover:bg-white/5 transition-all cursor-pointer group"
     >
-      <Icon size={14} className={activity.color} />
-      <div className="flex-1 min-w-0">
-        <div className="text-sm text-white truncate">{activity.title}</div>
-        <div className="text-xs text-gray-600 font-mono">{timeAgo}</div>
+      <div className={`p-2 rounded-lg bg-gradient-to-br from-white/10 to-white/5 border border-white/10 group-hover:scale-110 transition-transform`}>
+        <Icon size={14} className={activity.color} />
       </div>
+      <div className="flex-1 min-w-0">
+        <div className="text-sm text-white truncate font-medium group-hover:text-transparent group-hover:bg-clip-text group-hover:bg-gradient-to-r group-hover:from-white group-hover:to-gray-400 transition-all">
+          {activity.title}
+        </div>
+        <div className="text-xs text-gray-600 font-mono font-bold">{timeAgo}</div>
+      </div>
+      <ChevronRight size={12} className="text-gray-700 group-hover:text-gray-500 transition-colors" />
     </motion.div>
   );
 };
+
+// --- QUICK ACTION CARD ---
+const QuickActionCard = ({ title, description, icon: Icon, stats, gradient, onClick }) => (
+  <motion.button
+    initial={{ opacity: 0, scale: 0.9 }}
+    animate={{ opacity: 1, scale: 1 }}
+    whileHover={{ scale: 1.03, y: -4 }}
+    whileTap={{ scale: 0.98 }}
+    onClick={onClick}
+    className={`relative p-6 rounded-2xl bg-gradient-to-br ${gradient} border-2 border-white/10 hover:border-white/20 transition-all text-left group overflow-hidden shadow-xl`}
+  >
+    {/* Animated Glow */}
+    <div className={`absolute top-0 right-0 w-40 h-40 bg-white/10 rounded-full blur-3xl group-hover:scale-150 transition-transform duration-700`}></div>
+    
+    <div className="relative z-10 space-y-4">
+      <div className="flex items-start justify-between">
+        <div className="p-3 rounded-xl bg-white/10 backdrop-blur-sm border border-white/20 group-hover:scale-110 group-hover:rotate-3 transition-all shadow-lg">
+          <Icon size={24} className="text-white" />
+        </div>
+        <ArrowRight size={16} className="text-white/60 group-hover:text-white group-hover:translate-x-1 transition-all" />
+      </div>
+      
+      <div>
+        <h3 className="text-lg font-bold text-white mb-1">{title}</h3>
+        <p className="text-sm text-white/70 mb-3">{description}</p>
+        
+        <div className="flex items-center gap-2">
+          <div className="px-3 py-1.5 rounded-lg bg-white/10 backdrop-blur-sm border border-white/20">
+            <span className="text-xs font-bold text-white">{stats}</span>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    {/* Shine Effect */}
+    <div className="absolute inset-0 opacity-0 group-hover:opacity-100 transition-opacity duration-500">
+      <div className="absolute inset-0 bg-gradient-to-r from-transparent via-white/5 to-transparent translate-x-[-100%] group-hover:translate-x-[100%] transition-transform duration-1000"></div>
+    </div>
+  </motion.button>
+);
 
 // --- MAIN DASHBOARD ---
 export const DailyDashboard = () => {
@@ -159,66 +230,99 @@ export const DailyDashboard = () => {
       });
     });
 
-    return items.sort((a, b) => b.time - a.time).slice(0, 5);
+    return items.sort((a, b) => b.time - a.time).slice(0, 6);
   }, [sessions, projects]);
+
+  const currentHour = new Date().getHours();
+  const greeting = currentHour < 12 ? 'Good Morning' : currentHour < 18 ? 'Good Afternoon' : 'Good Evening';
 
   return (
     <div className="flex-1 h-full overflow-y-auto custom-scrollbar bg-[#030304] relative">
       {/* Subtle Grid Background */}
       <div className="absolute inset-0 bg-[linear-gradient(to_right,#80808012_1px,transparent_1px),linear-gradient(to_bottom,#80808012_1px,transparent_1px)] bg-[size:24px_24px] pointer-events-none opacity-30"></div>
 
-      <div className="max-w-[1600px] mx-auto p-8 relative z-10 space-y-6">
+      {/* Radial Gradient Overlay */}
+      <div className="absolute top-0 left-1/2 -translate-x-1/2 w-[1000px] h-[600px] bg-gradient-radial from-blue-500/5 via-purple-500/5 to-transparent blur-3xl pointer-events-none"></div>
+
+      <div className="max-w-[1600px] mx-auto p-8 relative z-10 space-y-8">
         
-        {/* Header */}
+        {/* Enhanced Header */}
         <motion.div
           initial={{ opacity: 0, y: -20 }}
           animate={{ opacity: 1, y: 0 }}
-          className="space-y-3 pb-6 border-b border-white/5"
+          className="space-y-4 pb-6 border-b border-white/10"
         >
-          <div className="flex items-center gap-2 text-xs font-mono text-gray-600">
-            <Clock size={12} />
-            <span>{new Date().toLocaleDateString('en-US', { weekday: 'long', month: 'long', day: 'numeric', year: 'numeric' })}</span>
-          </div>
-          <div className="flex items-center gap-3">
-            <div className={`h-8 w-8 bg-gradient-to-br ${theme.gradient} rounded-lg flex items-center justify-center shadow-lg ${theme.glow}`}>
-              <Brain size={18} className="text-white" />
+          <div className="flex items-center justify-between">
+            <div className="space-y-2">
+              <div className="flex items-center gap-2 text-xs font-mono text-gray-600">
+                <Clock size={12} />
+                <span>{new Date().toLocaleDateString('en-US', { weekday: 'long', month: 'long', day: 'numeric', year: 'numeric' })}</span>
+              </div>
+              <div className="flex items-center gap-4">
+                <div className={`h-12 w-12 bg-gradient-to-br ${theme.gradient} rounded-2xl flex items-center justify-center shadow-2xl ${theme.glow}`}>
+                  <Brain size={24} className="text-white" />
+                </div>
+                <div>
+                  <h1 className="text-4xl font-bold text-white tracking-tight">{greeting}</h1>
+                  <p className="text-sm text-gray-500 mt-1">Welcome back to your command center</p>
+                </div>
+              </div>
             </div>
-            <h1 className="text-3xl font-bold text-white tracking-tight">Command Center</h1>
+            
+            {/* Quick Stats Badge */}
+            <motion.div 
+              initial={{ scale: 0.9, opacity: 0 }}
+              animate={{ scale: 1, opacity: 1 }}
+              className="flex items-center gap-3 px-5 py-3 rounded-2xl bg-gradient-to-br from-white/5 to-transparent border border-white/10 backdrop-blur-xl"
+            >
+              <div className="flex items-center gap-2">
+                <Flame size={16} className="text-orange-400" />
+                <div>
+                  <div className="text-xs text-gray-500 font-medium">Active Streak</div>
+                  <div className="text-lg font-bold text-white">7 days</div>
+                </div>
+              </div>
+            </motion.div>
           </div>
         </motion.div>
 
-        {/* Stats Grid */}
-        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
+        {/* Enhanced Stats Grid */}
+        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-5">
           <StatCard
             icon={Calendar}
             label="Today's Events"
             value={stats.todayEvents}
-            trend={stats.upcomingDeadlines > 0 ? `${stats.upcomingDeadlines} upcoming` : null}
+            trendUp={false}
             onClick={() => setCurrentView('chronos')}
             theme={theme}
+            gradient="from-purple-500/20 to-pink-500/20"
           />
           <StatCard
             icon={Folder}
             label="Active Projects"
             value={stats.activeProjects}
-            trend={`${stats.totalProjects} total`}
+            trendUp={true}
             onClick={() => setCurrentView('dashboard')}
             theme={theme}
+            gradient="from-blue-500/20 to-cyan-500/20"
           />
           <StatCard
             icon={MessageSquare}
             label="Recent Chats"
             value={stats.recentChats}
-            trend="This week"
+            trendUp={true}
             onClick={() => setCurrentView('chat')}
             theme={theme}
+            gradient="from-green-500/20 to-emerald-500/20"
           />
           <StatCard
             icon={Layout}
             label="Canvas Nodes"
             value={stats.canvasNodes}
+            trendUp={false}
             onClick={() => setCurrentView('canvas')}
             theme={theme}
+            gradient="from-amber-500/20 to-orange-500/20"
           />
         </div>
 
@@ -226,200 +330,164 @@ export const DailyDashboard = () => {
         <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
           
           {/* Today's Schedule - 2 columns */}
-          <div className="lg:col-span-2 rounded-2xl glass-panel border border-white/5 overflow-hidden bg-[#0A0A0A]/80 backdrop-blur-xl">
-            <div className="flex items-center justify-between p-5 border-b border-white/5 bg-black/20">
+          <motion.div 
+            initial={{ opacity: 0, x: -20 }}
+            animate={{ opacity: 1, x: 0 }}
+            className="lg:col-span-2 rounded-2xl border border-white/10 overflow-hidden bg-gradient-to-br from-[#0A0A0A] to-[#0C0C0C] backdrop-blur-xl shadow-2xl"
+          >
+            <div className="flex items-center justify-between p-6 border-b border-white/10 bg-gradient-to-r from-white/5 to-transparent">
               <div className="flex items-center gap-3">
-                <Calendar size={16} className={theme.accentText} />
+                <div className="p-2 rounded-lg bg-purple-500/10 border border-purple-500/20">
+                  <Calendar size={18} className="text-purple-400" />
+                </div>
                 <div>
                   <h2 className="text-sm font-bold text-white uppercase tracking-widest">Today's Schedule</h2>
-                  <p className="text-[10px] text-gray-600 font-mono">{todaysEvents.length} events scheduled</p>
+                  <p className="text-[10px] text-gray-600 font-mono mt-0.5">
+                    {todaysEvents.length} event{todaysEvents.length !== 1 ? 's' : ''} scheduled
+                  </p>
                 </div>
               </div>
               <button
                 onClick={() => setCurrentView('chronos')}
-                className="text-xs text-gray-500 hover:text-white transition-colors flex items-center gap-1 font-mono"
+                className="flex items-center gap-2 px-4 py-2 rounded-lg text-xs font-bold text-gray-400 hover:text-white bg-white/5 hover:bg-white/10 transition-all border border-white/10"
               >
                 VIEW ALL <ArrowRight size={12} />
               </button>
             </div>
             
-            <div className="p-5 space-y-2 max-h-[400px] overflow-y-auto custom-scrollbar">
-              {todaysEvents.length === 0 ? (
-                <div className="flex flex-col items-center justify-center py-12 text-gray-600">
-                  <Calendar size={32} className="mb-3 opacity-20" />
-                  <p className="text-sm font-medium">No events today</p>
-                  <p className="text-xs text-gray-700 mt-1">Your schedule is clear</p>
-                </div>
-              ) : (
-                todaysEvents.map((event, i) => (
-                  <EventItem key={event.id} event={event} index={i} />
-                ))
-              )}
+            <div className="p-6 space-y-3 max-h-[450px] overflow-y-auto custom-scrollbar">
+              <AnimatePresence mode="popLayout">
+                {todaysEvents.length === 0 ? (
+                  <motion.div 
+                    initial={{ opacity: 0 }}
+                    animate={{ opacity: 1 }}
+                    exit={{ opacity: 0 }}
+                    className="flex flex-col items-center justify-center py-16 text-gray-600"
+                  >
+                    <div className="p-4 rounded-2xl bg-white/5 border border-white/10 mb-4">
+                      <Calendar size={48} className="opacity-30" />
+                    </div>
+                    <p className="text-sm font-bold text-white mb-1">No events today</p>
+                    <p className="text-xs text-gray-600">Your schedule is clear</p>
+                    <button
+                      onClick={() => setCurrentView('chronos')}
+                      className="mt-4 px-4 py-2 rounded-lg bg-white/5 hover:bg-white/10 border border-white/10 text-xs font-bold text-gray-400 hover:text-white transition-all flex items-center gap-2"
+                    >
+                      <Plus size={12} /> Add Event
+                    </button>
+                  </motion.div>
+                ) : (
+                  todaysEvents.map((event, i) => (
+                    <EventItem key={event.id} event={event} index={i} />
+                  ))
+                )}
+              </AnimatePresence>
             </div>
-          </div>
+          </motion.div>
 
           {/* Recent Activity - 1 column */}
-          <div className="rounded-2xl glass-panel border border-white/5 overflow-hidden bg-[#0A0A0A]/80 backdrop-blur-xl">
-            <div className="flex items-center gap-3 p-5 border-b border-white/5 bg-black/20">
-              <Activity size={16} className={theme.accentText} />
+          <motion.div 
+            initial={{ opacity: 0, x: 20 }}
+            animate={{ opacity: 1, x: 0 }}
+            className="rounded-2xl border border-white/10 overflow-hidden bg-gradient-to-br from-[#0A0A0A] to-[#0C0C0C] backdrop-blur-xl shadow-2xl"
+          >
+            <div className="flex items-center gap-3 p-6 border-b border-white/10 bg-gradient-to-r from-white/5 to-transparent">
+              <div className="p-2 rounded-lg bg-blue-500/10 border border-blue-500/20">
+                <Activity size={18} className="text-blue-400" />
+              </div>
               <div>
                 <h2 className="text-sm font-bold text-white uppercase tracking-widest">Recent Activity</h2>
-                <p className="text-[10px] text-gray-600 font-mono">Latest updates</p>
+                <p className="text-[10px] text-gray-600 font-mono mt-0.5">Latest updates</p>
               </div>
             </div>
             
-            <div className="p-5 space-y-2 max-h-[400px] overflow-y-auto custom-scrollbar">
-              {activities.length === 0 ? (
-                <div className="flex flex-col items-center justify-center py-12 text-gray-600">
-                  <Activity size={32} className="mb-3 opacity-20" />
-                  <p className="text-sm">No recent activity</p>
-                </div>
-              ) : (
-                activities.map((activity, i) => (
-                  <ActivityItem key={i} activity={activity} index={i} />
-                ))
-              )}
+            <div className="p-6 space-y-2 max-h-[450px] overflow-y-auto custom-scrollbar">
+              <AnimatePresence mode="popLayout">
+                {activities.length === 0 ? (
+                  <motion.div 
+                    initial={{ opacity: 0 }}
+                    animate={{ opacity: 1 }}
+                    exit={{ opacity: 0 }}
+                    className="flex flex-col items-center justify-center py-16 text-gray-600"
+                  >
+                    <div className="p-4 rounded-2xl bg-white/5 border border-white/10 mb-4">
+                      <Activity size={48} className="opacity-30" />
+                    </div>
+                    <p className="text-sm font-bold text-white">No recent activity</p>
+                  </motion.div>
+                ) : (
+                  activities.map((activity, i) => (
+                    <ActivityItem key={i} activity={activity} index={i} />
+                  ))
+                )}
+              </AnimatePresence>
             </div>
-          </div>
+          </motion.div>
         </div>
 
-        {/* Quick Launch Pad */}
-        <div className="space-y-4">
+        {/* Enhanced Quick Launch Pad */}
+        <motion.div 
+          initial={{ opacity: 0, y: 20 }}
+          animate={{ opacity: 1, y: 0 }}
+          transition={{ delay: 0.2 }}
+          className="space-y-5"
+        >
           <div className="flex items-center gap-3">
-            <Zap size={18} className={theme.accentText} />
+            <div className="p-2 rounded-lg bg-gradient-to-br from-yellow-500/10 to-orange-500/10 border border-yellow-500/20">
+              <Zap size={18} className="text-yellow-400" />
+            </div>
             <h2 className="text-sm font-bold text-white uppercase tracking-widest">Quick Launch Pad</h2>
           </div>
           
-          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
-            {/* Canvas Card */}
-            <motion.button
-              whileHover={{ scale: 1.02, y: -2 }}
-              whileTap={{ scale: 0.98 }}
+          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-5">
+            <QuickActionCard
+              title="Canvas"
+              description="Visual thinking space"
+              icon={Layout}
+              stats={`${stats.canvasNodes} nodes`}
+              gradient="from-blue-600 via-blue-500 to-purple-600"
               onClick={() => setCurrentView('canvas')}
-              className="relative p-6 rounded-2xl bg-gradient-to-br from-blue-500/10 via-purple-500/5 to-transparent border border-blue-500/20 hover:border-blue-500/40 transition-all text-left group overflow-hidden"
-            >
-              {/* Glow Effect */}
-              <div className="absolute top-0 right-0 w-32 h-32 bg-blue-500/20 rounded-full blur-3xl group-hover:bg-blue-500/30 transition-all"></div>
-              
-              <div className="relative z-10 space-y-4">
-                <div className="flex items-start justify-between">
-                  <div className="p-3 rounded-xl bg-blue-500/10 border border-blue-500/20 group-hover:bg-blue-500/20 transition-colors">
-                    <Layout size={24} className="text-blue-400" />
-                  </div>
-                  <ArrowRight size={16} className="text-blue-600 group-hover:text-blue-400 transition-colors group-hover:translate-x-1 transform duration-200" />
-                </div>
-                
-                <div>
-                  <h3 className="text-lg font-bold text-white mb-1">Canvas</h3>
-                  <p className="text-sm text-gray-500 mb-3">Visual thinking space</p>
-                  
-                  <div className="flex items-center gap-2">
-                    <div className="px-2 py-1 rounded-lg bg-blue-500/10 border border-blue-500/20">
-                      <span className="text-xs font-bold text-blue-400">{stats.canvasNodes}</span>
-                    </div>
-                    <span className="text-xs text-gray-600">nodes created</span>
-                  </div>
-                </div>
-              </div>
-            </motion.button>
-
-            {/* Zenith Card */}
-            <motion.button
-              whileHover={{ scale: 1.02, y: -2 }}
-              whileTap={{ scale: 0.98 }}
+            />
+            
+            <QuickActionCard
+              title="Zenith"
+              description="Creative writing suite"
+              icon={PenTool}
+              stats="Ready to write"
+              gradient="from-amber-600 via-orange-500 to-red-600"
               onClick={() => setCurrentView('zenith')}
-              className="relative p-6 rounded-2xl bg-gradient-to-br from-amber-500/10 via-orange-500/5 to-transparent border border-amber-500/20 hover:border-amber-500/40 transition-all text-left group overflow-hidden"
-            >
-              {/* Glow Effect */}
-              <div className="absolute top-0 right-0 w-32 h-32 bg-amber-500/20 rounded-full blur-3xl group-hover:bg-amber-500/30 transition-all"></div>
-              
-              <div className="relative z-10 space-y-4">
-                <div className="flex items-start justify-between">
-                  <div className="p-3 rounded-xl bg-amber-500/10 border border-amber-500/20 group-hover:bg-amber-500/20 transition-colors">
-                    <FileText size={24} className="text-amber-400" />
-                  </div>
-                  <ArrowRight size={16} className="text-amber-600 group-hover:text-amber-400 transition-colors group-hover:translate-x-1 transform duration-200" />
-                </div>
-                
-                <div>
-                  <h3 className="text-lg font-bold text-white mb-1">Zenith</h3>
-                  <p className="text-sm text-gray-500 mb-3">Creative writing suite</p>
-                  
-                  <div className="flex items-center gap-2">
-                    <div className="px-2 py-1 rounded-lg bg-amber-500/10 border border-amber-500/20">
-                      <span className="text-xs font-bold text-amber-400">Ready</span>
-                    </div>
-                    <span className="text-xs text-gray-600">to write</span>
-                  </div>
-                </div>
-              </div>
-            </motion.button>
-
-            {/* Chronos Card */}
-            <motion.button
-              whileHover={{ scale: 1.02, y: -2 }}
-              whileTap={{ scale: 0.98 }}
+            />
+            
+            <QuickActionCard
+              title="Chronos"
+              description="Calendar & events"
+              icon={Calendar}
+              stats={`${stats.todayEvents} today`}
+              gradient="from-purple-600 via-pink-500 to-rose-600"
               onClick={() => setCurrentView('chronos')}
-              className="relative p-6 rounded-2xl bg-gradient-to-br from-purple-500/10 via-pink-500/5 to-transparent border border-purple-500/20 hover:border-purple-500/40 transition-all text-left group overflow-hidden"
-            >
-              {/* Glow Effect */}
-              <div className="absolute top-0 right-0 w-32 h-32 bg-purple-500/20 rounded-full blur-3xl group-hover:bg-purple-500/30 transition-all"></div>
-              
-              <div className="relative z-10 space-y-4">
-                <div className="flex items-start justify-between">
-                  <div className="p-3 rounded-xl bg-purple-500/10 border border-purple-500/20 group-hover:bg-purple-500/20 transition-colors">
-                    <Calendar size={24} className="text-purple-400" />
-                  </div>
-                  <ArrowRight size={16} className="text-purple-600 group-hover:text-purple-400 transition-colors group-hover:translate-x-1 transform duration-200" />
-                </div>
-                
-                <div>
-                  <h3 className="text-lg font-bold text-white mb-1">Chronos</h3>
-                  <p className="text-sm text-gray-500 mb-3">Calendar & events</p>
-                  
-                  <div className="flex items-center gap-2">
-                    <div className="px-2 py-1 rounded-lg bg-purple-500/10 border border-purple-500/20">
-                      <span className="text-xs font-bold text-purple-400">{stats.todayEvents}</span>
-                    </div>
-                    <span className="text-xs text-gray-600">events today</span>
-                  </div>
-                </div>
-              </div>
-            </motion.button>
-
-            {/* Chat Card */}
-            <motion.button
-              whileHover={{ scale: 1.02, y: -2 }}
-              whileTap={{ scale: 0.98 }}
+            />
+            
+            <QuickActionCard
+              title="Chat"
+              description="AI conversations"
+              icon={MessageSquare}
+              stats={`${stats.recentChats} this week`}
+              gradient="from-green-600 via-emerald-500 to-teal-600"
               onClick={() => setCurrentView('chat')}
-              className="relative p-6 rounded-2xl bg-gradient-to-br from-green-500/10 via-emerald-500/5 to-transparent border border-green-500/20 hover:border-green-500/40 transition-all text-left group overflow-hidden"
-            >
-              {/* Glow Effect */}
-              <div className="absolute top-0 right-0 w-32 h-32 bg-green-500/20 rounded-full blur-3xl group-hover:bg-green-500/30 transition-all"></div>
-              
-              <div className="relative z-10 space-y-4">
-                <div className="flex items-start justify-between">
-                  <div className="p-3 rounded-xl bg-green-500/10 border border-green-500/20 group-hover:bg-green-500/20 transition-colors">
-                    <MessageSquare size={24} className="text-green-400" />
-                  </div>
-                  <ArrowRight size={16} className="text-green-600 group-hover:text-green-400 transition-colors group-hover:translate-x-1 transform duration-200" />
-                </div>
-                
-                <div>
-                  <h3 className="text-lg font-bold text-white mb-1">Chat</h3>
-                  <p className="text-sm text-gray-500 mb-3">AI conversations</p>
-                  
-                  <div className="flex items-center gap-2">
-                    <div className="px-2 py-1 rounded-lg bg-green-500/10 border border-green-500/20">
-                      <span className="text-xs font-bold text-green-400">{stats.recentChats}</span>
-                    </div>
-                    <span className="text-xs text-gray-600">this week</span>
-                  </div>
-                </div>
-              </div>
-            </motion.button>
+            />
           </div>
-        </div>
+        </motion.div>
+
+        {/* Footer Info */}
+        <motion.div 
+          initial={{ opacity: 0 }}
+          animate={{ opacity: 1 }}
+          transition={{ delay: 0.3 }}
+          className="flex items-center justify-center gap-2 text-xs text-gray-700 font-mono pt-4"
+        >
+          <Sparkles size={12} className="text-gray-600" />
+          <span>Powered by OmniLab Intelligence</span>
+        </motion.div>
 
       </div>
     </div>
