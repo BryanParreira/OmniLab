@@ -19,6 +19,36 @@ const COMMAND_REGISTRY = {
   '/refactor': "Refactor this code to be cleaner."
 };
 
+// --- HOOK: Smooth Streaming ---
+// Controls the frame rate of the text update to ensure 60fps UI performance
+const useSmoothStream = (content, isStreaming) => {
+  const [displayContent, setDisplayContent] = useState(content);
+  const lastUpdateRef = useRef(Date.now());
+
+  useEffect(() => {
+    // If not streaming, show immediate content
+    if (!isStreaming) {
+      setDisplayContent(content);
+      return;
+    }
+
+    // Throttling logic: Update only every ~30ms
+    const now = Date.now();
+    if (now - lastUpdateRef.current > 30) {
+      setDisplayContent(content);
+      lastUpdateRef.current = now;
+    } else {
+      const handler = setTimeout(() => {
+        setDisplayContent(content);
+        lastUpdateRef.current = Date.now();
+      }, 30);
+      return () => clearTimeout(handler);
+    }
+  }, [content, isStreaming]);
+
+  return displayContent;
+};
+
 // --- COMPONENT: Thinking Indicator ---
 const ThinkingIndicator = ({ theme }) => (
   <div className="flex items-center gap-3 py-1 pl-1 animate-in fade-in duration-300">
@@ -86,9 +116,12 @@ const AttachmentPreview = ({ file, onRemove }) => {
   );
 };
 
-const CodeBlock = ({ language, children }) => {
+// Optimized CodeBlock with Memoization
+const CodeBlock = React.memo(({ language, children }) => {
   const { openLabBench, theme } = useLumina();
   const [isSaved, setIsSaved] = useState(false);
+  
+  const rawCode = String(children).replace(/\n$/, '');
   
   const handleSave = useCallback(async () => { 
     if (window.lumina) { 
@@ -107,7 +140,7 @@ const CodeBlock = ({ language, children }) => {
         <span className="uppercase tracking-wider font-bold text-gray-500">{language}</span>
         <div className="flex gap-2 opacity-0 group-hover:opacity-100 transition-opacity">
           <button 
-            onClick={() => openLabBench(String(children).replace(/\n$/, ''), language)}
+            onClick={() => openLabBench(rawCode, language)}
             className={`flex items-center gap-1.5 ${theme.accentText} hover:bg-white/5 px-2 py-1 rounded transition-colors`}
           >
             <FlaskConical size={12} /> Open in Lab
@@ -117,10 +150,10 @@ const CodeBlock = ({ language, children }) => {
           </button>
         </div>
       </div>
-      <SyntaxHighlighter children={String(children).replace(/\n$/, '')} style={vscDarkPlus} language={language} PreTag="div" customStyle={{ margin: 0, background: 'transparent', fontSize: '13px', padding: '1.5rem', lineHeight: '1.6' }} />
+      <SyntaxHighlighter children={rawCode} style={vscDarkPlus} language={language} PreTag="div" customStyle={{ margin: 0, background: 'transparent', fontSize: '13px', padding: '1.5rem', lineHeight: '1.6' }} />
     </div>
   );
-};
+});
 
 const Callout = ({ children, theme }) => (
   <div className={`my-6 border-l-2 ${theme.primaryBorder} ${theme.softBg} p-5 rounded-r-2xl text-gray-300 text-sm flex gap-4 shadow-sm`}>
@@ -130,21 +163,37 @@ const Callout = ({ children, theme }) => (
 );
 
 const MessageBubble = React.memo(({ msg, theme, fontSize, isStreaming }) => {
+  // 1. Use the smooth stream hook to buffer content updates
+  const smoothContent = useSmoothStream(msg.content, isStreaming);
+
   // Remove <thinking> tags from content for display
   const mainContent = useMemo(() => {
-    let content = msg.content.replace(/<thinking>[\s\S]*?<\/thinking>/gi, '').trim();
+    let content = smoothContent.replace(/<thinking>[\s\S]*?<\/thinking>/gi, '').trim();
     content = content.replace(/<thinking>[\s\S]*$/gi, '');
     return content;
-  }, [msg.content]);
+  }, [smoothContent]);
   
   const isUser = msg.role === 'user';
   
-  // Logic: If content is empty AND we are streaming (and it's the assistant), show ThinkingIndicator.
-  const isEmpty = !mainContent || mainContent.trim() === '';
-  const showThinking = !isUser && isStreaming && isEmpty;
+  // Logic: Use RAW content for empty check to ensure responsiveness, but render smooth content
+  const rawIsEmpty = !msg.content || msg.content.replace(/<thinking>[\s\S]*?<\/thinking>/gi, '').trim() === '';
+  const showThinking = !isUser && isStreaming && rawIsEmpty;
 
   // If empty and NOT thinking, don't render anything (prevents empty bubbles)
-  if (isEmpty && !showThinking) return null;
+  if (rawIsEmpty && !showThinking) return null;
+
+  // 2. Memoize markdown components to prevent CodeBlock tearing down on every frame
+  const markdownComponents = useMemo(() => ({
+    code({node, inline, className, children, ...props}) { 
+      const match = /language-(\w+)/.exec(className || ''); 
+      return !inline && match ? <CodeBlock language={match[1]} children={children} /> : <code {...props} className="bg-white/10 px-1.5 py-0.5 rounded text-white font-mono text-[0.9em] border border-white/5 mx-1">{children}</code>;
+    },
+    blockquote: ({children}) => <Callout theme={theme}>{children}</Callout>,
+    table: ({children}) => <div className="overflow-x-auto my-6 border border-white/10 rounded-2xl"><table className="w-full text-left text-sm">{children}</table></div>,
+    th: ({children}) => <th className="bg-[#111] p-4 font-semibold border-b border-white/10 text-gray-200">{children}</th>,
+    td: ({children}) => <td className="p-4 border-b border-white/5 text-gray-400">{children}</td>,
+    a: ({href, children}) => <a href={href} target="_blank" rel="noopener noreferrer" className={`${theme.accentText} hover:underline underline-offset-4`}>{children}</a>
+  }), [theme]);
 
   return (
     <div className={clsx("flex gap-6 group animate-fade-in mb-8", isUser ? "flex-row-reverse" : "")}>
@@ -190,17 +239,10 @@ const MessageBubble = React.memo(({ msg, theme, fontSize, isStreaming }) => {
             {showThinking ? (
               <ThinkingIndicator theme={theme} />
             ) : (
-              <Markdown remarkPlugins={[remarkGfm]} components={{ 
-                  code({node, inline, className, children, ...props}) { 
-                    const match = /language-(\w+)/.exec(className || ''); 
-                    return !inline && match ? <CodeBlock language={match[1]} children={children} /> : <code {...props} className="bg-white/10 px-1.5 py-0.5 rounded text-white font-mono text-[0.9em] border border-white/5 mx-1">{children}</code>;
-                  },
-                  blockquote: ({children}) => <Callout theme={theme}>{children}</Callout>,
-                  table: ({children}) => <div className="overflow-x-auto my-6 border border-white/10 rounded-2xl"><table className="w-full text-left text-sm">{children}</table></div>,
-                  th: ({children}) => <th className="bg-[#111] p-4 font-semibold border-b border-white/10 text-gray-200">{children}</th>,
-                  td: ({children}) => <td className="p-4 border-b border-white/5 text-gray-400">{children}</td>,
-                  a: ({href, children}) => <a href={href} target="_blank" rel="noopener noreferrer" className={`${theme.accentText} hover:underline underline-offset-4`}>{children}</a>
-                }}>
+              <Markdown 
+                remarkPlugins={[remarkGfm]} 
+                components={markdownComponents} // Use Memoized components
+              >
                 {mainContent}
               </Markdown>
             )}
@@ -346,8 +388,14 @@ export const Workspace = () => {
   const fileInputRef = useRef(null);
   const dropZoneRef = useRef(null);
 
+  // Optimized Scroll Logic: Instant ('auto') during generation to prevent wobbling, 'smooth' otherwise
   useEffect(() => { 
-    bottomRef.current?.scrollIntoView({ behavior: 'smooth', block: 'nearest' }); 
+    if (bottomRef.current) {
+      bottomRef.current.scrollIntoView({ 
+        behavior: isLoading ? 'auto' : 'smooth', 
+        block: 'nearest' 
+      }); 
+    }
   }, [messages, isLoading]);
   
   useEffect(() => { 
