@@ -437,7 +437,7 @@ export const Sidebar = () => {
           <div className={`h-6 w-6 bg-gradient-to-br ${theme.gradient} rounded-md flex items-center justify-center shadow-lg shadow-indigo-500/20`}>
             <Brain size={14} className="text-white" />
           </div>
-          <span className="font-bold text-xs tracking-widest text-white/90 uppercase">OmniLab</span>
+          <span className="font-bold text-xs tracking-widest text-white/90 uppercase">Brainless</span>
         </div>
         
         {/* --- HORIZONTAL CONTROL DECK WITH HOME --- */}

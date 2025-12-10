@@ -10,7 +10,7 @@ import {
 import { motion, AnimatePresence } from 'framer-motion';
 
 // --- CONFIGURATION ---
-const REPO_URL = "https://github.com/BryanParreira/OmniLab";
+const REPO_URL = "https://github.com/BryanParreira/Brainless";
 
 const getTheme = (isDev) => ({
   accent: isDev ? 'text-rose-400' : 'text-indigo-400',
@@ -433,7 +433,7 @@ export const Settings = ({ isOpen, onClose }) => {
               <div>
                 <h2 className="text-lg font-bold text-white tracking-tight">System Configuration</h2>
                 <div className="flex items-center gap-2 mt-0.5">
-                  <p className="text-xs text-gray-500 font-mono uppercase tracking-wider">OmniLab {form.developerMode ? 'Forge' : 'Nexus'} OS</p>
+                  <p className="text-xs text-gray-500 font-mono uppercase tracking-wider">Brainless {form.developerMode ? 'Forge' : 'Nexus'} OS</p>
                   {form.developerMode && (
                     <motion.div 
                       initial={{ scale: 0 }}
@@ -497,7 +497,7 @@ export const Settings = ({ isOpen, onClose }) => {
                 active={activeTab === 'about'} 
                 onClick={() => setActiveTab('about')} 
                 icon={Info} 
-                label="About OmniLab" 
+                label="About Brainless" 
                 desc="Docs & Updates" 
                 theme={localTheme} 
               />
@@ -871,7 +871,7 @@ export const Settings = ({ isOpen, onClose }) => {
                         >
                           <Brain size={40} className="text-white" />
                         </motion.div>
-                        <h3 className="text-2xl font-bold text-white tracking-tight">OmniLab</h3>
+                        <h3 className="text-2xl font-bold text-white tracking-tight">Brainless</h3>
                         <p className="text-sm text-gray-500 font-mono mt-1">{form.developerMode ? 'Forge' : 'Nexus'} Build</p>
                         <p className="text-xs text-gray-600 mt-3 max-w-md leading-relaxed">
                           A powerful AI-native workspace combining research, development, and productivity tools in one unified experience.
@@ -882,7 +882,7 @@ export const Settings = ({ isOpen, onClose }) => {
                         title="Software Update" 
                         icon={RefreshCw} 
                         theme={localTheme}
-                        description="Keep OmniLab up to date with the latest features and improvements"
+                        description="Keep Brainless up to date with the latest features and improvements"
                       >
                         <div className="p-6 rounded-2xl bg-[#0A0A0A] border border-white/10 relative overflow-hidden">
                           {updateStatus === 'downloading' && (
@@ -1033,7 +1033,7 @@ export const Settings = ({ isOpen, onClose }) => {
           {/* Footer */}
           <div className="p-6 border-t border-white/5 bg-[#020202]/80 backdrop-blur-sm flex justify-between items-center relative z-10">
             <div className="flex items-center gap-3">
-              <div className="text-[10px] text-gray-600 font-mono">v1.0.0-OmniLab</div>
+              <div className="text-[10px] text-gray-600 font-mono">Brainless</div>
               {hasChanges && (
                 <motion.div 
                   initial={{ scale: 0, opacity: 0 }}
