@@ -21,7 +21,6 @@ const getBezierPath = (x1, y1, x2, y2) => {
   return `M ${x1} ${y1} C ${cp1X} ${y1}, ${cp2X} ${y2}, ${x2} ${y2}`;
 };
 
-// Smart Positioning: Finds a spot that doesn't overlap with existing nodes
 const findSmartPosition = (parentX, parentY, index, total, existingNodes) => {
     let radius = 400;
     let angle = (index / total) * 2 * Math.PI;

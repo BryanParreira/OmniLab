@@ -199,10 +199,8 @@ const parseICS = (icsContent) => {
   const events = [];
   console.log('🔍 Starting ICS parsing...');
   
-  // Clean the content - remove any BOM and normalize line endings
   const cleanContent = icsContent.replace(/^\uFEFF/, '').replace(/\r\n/g, '\n').replace(/\r/g, '\n');
   
-  // Split by BEGIN:VEVENT to find event blocks
   const eventBlocks = cleanContent.split('BEGIN:VEVENT');
   console.log(`Found ${eventBlocks.length - 1} event blocks`);
   
@@ -210,7 +208,6 @@ const parseICS = (icsContent) => {
     const block = eventBlocks[i];
     
     try {
-      // Extract fields using regex
       const summaryMatch = block.match(/SUMMARY:(.+?)(?:\n|$)/);
       const dateMatch = block.match(/DTSTART[^:]*:(\d{8})/);
       const descMatch = block.match(/DESCRIPTION:(.+?)(?:\n(?![^\n])|$)/s);
@@ -230,7 +227,6 @@ const parseICS = (icsContent) => {
         const month = dateStr.substring(4, 6);
         const day = dateStr.substring(6, 8);
         
-        // Parse priority (ICS uses 1=high, 5=medium, 9=low)
         let priority = 'medium';
         if (priorityMatch) {
           const p = parseInt(priorityMatch[1]);
@@ -238,7 +234,6 @@ const parseICS = (icsContent) => {
           else if (p >= 7) priority = 'low';
         }
         
-        // Parse type from categories
         let type = 'general';
         if (categoryMatch) {
           const cat = categoryMatch[1].trim().toLowerCase();
@@ -247,7 +242,6 @@ const parseICS = (icsContent) => {
           }
         }
         
-        // Clean up description
         let notes = '';
         if (descMatch) {
           notes = descMatch[1]
@@ -422,7 +416,6 @@ const CalendarDay = React.memo(({ day, dateStr, dayEvents, isToday, theme, onDay
         isHovered && !isDragOver ? 'shadow-lg shadow-black/50 border-white/20' : ''
       }`}
     >
-      {/* Day Number Header */}
       <div className="flex justify-between items-start mb-2">
         <div className={`text-xs font-bold w-7 h-7 flex items-center justify-center rounded-xl transition-all ${
           isToday 
@@ -440,7 +433,6 @@ const CalendarDay = React.memo(({ day, dateStr, dayEvents, isToday, theme, onDay
         )}
       </div>
       
-      {/* Events Container */}
       <div className="flex-1 overflow-y-auto custom-scrollbar space-y-1.5">
         <AnimatePresence>
           {dayEvents.length === 0 && isHovered && (
@@ -473,7 +465,6 @@ const CalendarDay = React.memo(({ day, dateStr, dayEvents, isToday, theme, onDay
         )}
       </div>
       
-      {/* Drop indicator */}
       <AnimatePresence>
         {isDragOver && (
           <motion.div 
@@ -1104,7 +1095,6 @@ export const Chronos = React.memo(() => {
               return;
             }
             
-            // Add each event to the calendar
             let successCount = 0;
             let failCount = 0;
             
@@ -1112,7 +1102,6 @@ export const Chronos = React.memo(() => {
               try {
                 console.log(`Adding event ${index + 1}/${importedEvents.length}:`, evt);
                 
-                // Ensure addEvent is available
                 if (typeof addEvent === 'function') {
                   addEvent(evt.title, evt.date, evt.type, evt.priority, evt.notes, evt.time);
                   successCount++;
