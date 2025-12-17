@@ -294,6 +294,8 @@ app.whenReady().then(() => {
   } catch (e) { console.warn("Could not register Alt+Space"); }
   
   if (app.isPackaged) autoUpdater.checkForUpdatesAndNotify();
+  
+  
 
   // ==========================================
   // 🧠 ENHANCED SYNAPSE v3.0 IPC HANDLERS

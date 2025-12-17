@@ -439,21 +439,6 @@ export const DailyDashboard = () => {
                 </div>
               </div>
             </div>
-            
-            {/* Quick Stats Badge */}
-            <motion.div 
-              initial={{ scale: 0.9, opacity: 0 }}
-              animate={{ scale: 1, opacity: 1 }}
-              className="flex items-center gap-3 px-5 py-3 rounded-2xl bg-gradient-to-br from-white/5 to-transparent border border-white/10 backdrop-blur-xl"
-            >
-              <div className="flex items-center gap-2">
-                <Flame size={16} className="text-orange-400" />
-                <div>
-                  <div className="text-xs text-gray-500 font-medium">Active Streak</div>
-                  <div className="text-lg font-bold text-white">7 days</div>
-                </div>
-              </div>
-            </motion.div>
           </div>
         </motion.div>
 

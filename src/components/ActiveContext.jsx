@@ -9,26 +9,25 @@ import {
   Calendar,
   Layers,
   Zap,
-  ExternalLink,
   TrendingUp,
   Sparkles,
   Clock,
-  MousePointer2,
-  Link2,
   Info,
   History,
-  Lightbulb
+  Lightbulb,
+  Link2,
+  AlertCircle
 } from 'lucide-react';
 import { useLumina } from '../context/LuminaContext';
 
 /**
- * ENHANCED ACTIVE CONTEXT SIDEBAR v3.0
+ * ENHANCED ACTIVE CONTEXT SIDEBAR v4.0 (OPTIMIZED)
  * Production-ready intelligent context with:
- * - Smart suggestions
- * - Relevance explanations
- * - Auto-linking
- * - Context history
- * - Interaction tracking
+ * - Non-blocking context fetching
+ * - Request cancellation
+ * - Error boundaries
+ * - Graceful degradation
+ * - Background processing
  */
 
 const SOURCE_ICONS = {
@@ -53,7 +52,11 @@ const ContextCard = ({ item, onClick, theme, onInteraction }) => {
   const handleClick = () => {
     onClick();
     if (onInteraction && window.lumina?.synapse) {
-      window.lumina.synapse.recordInteraction(item.id);
+      try {
+        window.lumina.synapse.recordInteraction(item.id);
+      } catch (e) {
+        // Silent fail - interaction tracking is optional
+      }
     }
   };
   
@@ -69,7 +72,7 @@ const ContextCard = ({ item, onClick, theme, onInteraction }) => {
       <div className="absolute top-0 left-0 right-0 h-1 bg-white/5 rounded-t-xl overflow-hidden">
         <motion.div
           initial={{ width: 0 }}
-          animate={{ width: `${item.relevance}%` }}
+          animate={{ width: `${item.relevance || 0}%` }}
           className={`h-full bg-gradient-to-r ${bgClass.replace('/20', '/60')}`}
         />
       </div>
@@ -84,15 +87,17 @@ const ContextCard = ({ item, onClick, theme, onInteraction }) => {
             {item.source}
           </span>
         </div>
-        <div className="flex items-center gap-1 text-[10px] text-gray-500">
-          <TrendingUp size={10} />
-          <span>{Math.round(item.relevance)}%</span>
-        </div>
+        {item.relevance && (
+          <div className="flex items-center gap-1 text-[10px] text-gray-500">
+            <TrendingUp size={10} />
+            <span>{Math.round(item.relevance)}%</span>
+          </div>
+        )}
       </div>
 
       {/* Title */}
       <h4 className="text-sm font-semibold text-white mb-2 line-clamp-2 group-hover:text-blue-400 transition-colors">
-        {item.metadata.filename || item.metadata.title || 'Untitled'}
+        {item.metadata?.filename || item.metadata?.title || 'Untitled'}
       </h4>
 
       {/* Preview */}
@@ -129,7 +134,7 @@ const ContextCard = ({ item, onClick, theme, onInteraction }) => {
         <div className="flex items-center gap-2 text-[9px] text-gray-600">
           <Clock size={10} />
           <span>
-            {item.metadata.timestamp ? new Date(item.metadata.timestamp).toLocaleDateString() : ''}
+            {item.metadata?.timestamp ? new Date(item.metadata.timestamp).toLocaleDateString() : ''}
           </span>
         </div>
         <ChevronRight size={12} className="text-gray-600 group-hover:text-blue-400 transition-colors" />
@@ -155,14 +160,16 @@ const SmartSuggestion = ({ suggestion, onClick, theme }) => {
         <div className="flex-1 min-w-0">
           <div className="flex items-center gap-2 mb-1">
             <span className="text-[10px] font-bold text-yellow-400 uppercase">
-              {suggestion.reason}
+              {suggestion.reason || 'Suggested'}
             </span>
-            <span className="text-[9px] text-gray-600">
-              • {suggestion.timesUsed}x accessed
-            </span>
+            {suggestion.timesUsed && (
+              <span className="text-[9px] text-gray-600">
+                • {suggestion.timesUsed}x accessed
+              </span>
+            )}
           </div>
           <p className="text-xs text-white font-medium line-clamp-2 mb-2">
-            {suggestion.preview}
+            {suggestion.preview || 'Suggested content'}
           </p>
           {suggestion.commonTerms && suggestion.commonTerms.length > 0 && (
             <div className="flex gap-1 flex-wrap">
@@ -190,7 +197,7 @@ const ContextHistory = ({ history, onRestore, theme }) => {
       <div className="flex items-center gap-2 mb-3">
         <History size={14} className={theme.accentText} />
         <span className="text-[10px] font-bold uppercase tracking-wider text-gray-400">
-          Last AI Response Used
+          Recent Context
         </span>
       </div>
       <div className="space-y-2">
@@ -200,8 +207,10 @@ const ContextHistory = ({ history, onRestore, theme }) => {
             className="flex items-center justify-between text-[10px] text-gray-500 hover:text-white transition-colors cursor-pointer p-2 hover:bg-white/5 rounded"
             onClick={() => onRestore && onRestore(item)}
           >
-            <span className="flex-1 truncate">{item.preview}</span>
-            <span className="text-[9px] text-gray-600">{Math.round(item.relevance)}%</span>
+            <span className="flex-1 truncate">{item.preview || item.content?.slice(0, 50) || 'Item'}</span>
+            {item.relevance && (
+              <span className="text-[9px] text-gray-600">{Math.round(item.relevance)}%</span>
+            )}
           </div>
         ))}
       </div>
@@ -209,41 +218,122 @@ const ContextHistory = ({ history, onRestore, theme }) => {
   );
 };
 
+const ErrorState = ({ theme, message, onRetry }) => (
+  <motion.div
+    initial={{ opacity: 0 }}
+    animate={{ opacity: 1 }}
+    exit={{ opacity: 0 }}
+    className="flex flex-col items-center justify-center py-12 text-center px-4"
+  >
+    <AlertCircle size={32} className="text-red-400 mb-3" />
+    <p className="text-xs text-red-400 mb-2">Context Error</p>
+    <p className="text-[10px] text-gray-600 mb-4">{message}</p>
+    {onRetry && (
+      <button
+        onClick={onRetry}
+        className={`text-xs px-3 py-1 rounded-lg ${theme.softBg} ${theme.accentText} hover:opacity-80 transition-opacity`}
+      >
+        Retry
+      </button>
+    )}
+  </motion.div>
+);
+
 export const ActiveContext = ({ currentView, currentInput, isOpen, onClose, onNavigate }) => {
-  const { theme } = useLumina();
+  const { theme, synapseReady } = useLumina();
   const [contextItems, setContextItems] = useState([]);
   const [smartSuggestions, setSmartSuggestions] = useState([]);
   const [contextHistory, setContextHistory] = useState([]);
   const [isLoading, setIsLoading] = useState(false);
   const [showHistory, setShowHistory] = useState(false);
+  const [error, setError] = useState(null);
+  
   const debounceTimer = useRef(null);
+  const abortControllerRef = useRef(null);
+  const lastQueryRef = useRef('');
 
-  // Fetch context based on current activity
+  // Fetch context based on current activity (NON-BLOCKING)
   const fetchContext = useCallback(async (query) => {
+    // Don't fetch if:
+    // 1. Query too short
+    // 2. Same as last query
+    // 3. Synapse not ready
     if (!query || query.trim().length < 10) {
       setContextItems([]);
+      setSmartSuggestions([]);
       return;
     }
 
+    if (query === lastQueryRef.current) {
+      return;
+    }
+
+    if (!synapseReady || !window.lumina?.synapse) {
+      return;
+    }
+
+    // Cancel previous request
+    if (abortControllerRef.current) {
+      abortControllerRef.current.abort();
+    }
+
+    abortControllerRef.current = new AbortController();
+    lastQueryRef.current = query;
+    
     setIsLoading(true);
+    setError(null);
+
     try {
-      const results = await window.lumina.synapse.getContext(query, currentView);
+      // Non-blocking Promise with timeout
+      const timeoutPromise = new Promise((_, reject) => {
+        setTimeout(() => reject(new Error('Context fetch timeout')), 3000);
+      });
+
+      const fetchPromise = window.lumina.synapse.getContext(query, currentView);
+
+      const results = await Promise.race([fetchPromise, timeoutPromise]);
+      
+      // Check if request was aborted
+      if (abortControllerRef.current?.signal.aborted) {
+        return;
+      }
+
       setContextItems(results || []);
       
-      // Get smart suggestions
-      const queryTerms = query.toLowerCase().split(/\s+/).filter(t => t.length > 2);
-      const suggestions = await window.lumina.synapse.getSmartSuggestions(currentView, queryTerms);
-      setSmartSuggestions(suggestions || []);
-    } catch (error) {
-      console.error('Context fetch error:', error);
-      setContextItems([]);
-      setSmartSuggestions([]);
-    } finally {
-      setIsLoading(false);
-    }
-  }, [currentView]);
+      // Get smart suggestions (also non-blocking)
+      try {
+        const queryTerms = query.toLowerCase().split(/\s+/).filter(t => t.length > 2);
+        const suggestions = await window.lumina.synapse.getSmartSuggestions(currentView, queryTerms);
+        
+        if (!abortControllerRef.current?.signal.aborted) {
+          setSmartSuggestions(suggestions || []);
+        }
+      } catch (suggestionError) {
+        // Suggestions are optional - fail silently
+        console.debug('Suggestions unavailable:', suggestionError.message);
+      }
 
-  // Debounced input tracking
+    } catch (error) {
+      // Only set error if not aborted and not timeout
+      if (!abortControllerRef.current?.signal.aborted) {
+        console.warn('Context fetch error:', error.message);
+        
+        // Don't show error for timeouts - just clear results
+        if (error.message === 'Context fetch timeout') {
+          setContextItems([]);
+          setSmartSuggestions([]);
+        } else {
+          setError(error.message);
+        }
+      }
+    } finally {
+      if (!abortControllerRef.current?.signal.aborted) {
+        setIsLoading(false);
+      }
+    }
+  }, [currentView, synapseReady]);
+
+  // Debounced input tracking (OPTIMIZED)
   useEffect(() => {
     if (debounceTimer.current) {
       clearTimeout(debounceTimer.current);
@@ -252,8 +342,11 @@ export const ActiveContext = ({ currentView, currentInput, isOpen, onClose, onNa
     debounceTimer.current = setTimeout(() => {
       if (currentInput && currentInput.trim()) {
         fetchContext(currentInput);
+      } else {
+        setContextItems([]);
+        setSmartSuggestions([]);
       }
-    }, 500);
+    }, 800); // Increased debounce time for smoother performance
 
     return () => {
       if (debounceTimer.current) {
@@ -262,23 +355,105 @@ export const ActiveContext = ({ currentView, currentInput, isOpen, onClose, onNa
     };
   }, [currentInput, fetchContext]);
 
-  const handleCardClick = (item) => {
+  // Cleanup on unmount
+  useEffect(() => {
+    return () => {
+      if (abortControllerRef.current) {
+        abortControllerRef.current.abort();
+      }
+      if (debounceTimer.current) {
+        clearTimeout(debounceTimer.current);
+      }
+    };
+  }, []);
+
+  const handleCardClick = useCallback((item) => {
     // Add to history
-    setContextHistory(prev => [item, ...prev.slice(0, 9)]);
+    setContextHistory(prev => {
+      const newHistory = [item, ...prev.filter(h => h.id !== item.id)].slice(0, 10);
+      
+      // Persist to localStorage
+      try {
+        localStorage.setItem('contextHistory', JSON.stringify(newHistory));
+      } catch (e) {
+        console.warn('Could not save context history');
+      }
+      
+      return newHistory;
+    });
     
     // Navigate to the source
     if (onNavigate) {
       onNavigate(item.source, item.metadata);
     }
-  };
+  }, [onNavigate]);
 
-  const handleSuggestionClick = (suggestion) => {
+  const handleSuggestionClick = useCallback((suggestion) => {
     if (onNavigate) {
       onNavigate(suggestion.source, suggestion.metadata);
     }
-  };
+  }, [onNavigate]);
+
+  const handleRetry = useCallback(() => {
+    if (currentInput && currentInput.trim()) {
+      lastQueryRef.current = ''; // Force refresh
+      fetchContext(currentInput);
+    }
+  }, [currentInput, fetchContext]);
+
+  // Load context history from localStorage on mount
+  useEffect(() => {
+    try {
+      const stored = localStorage.getItem('contextHistory');
+      if (stored) {
+        setContextHistory(JSON.parse(stored));
+      }
+    } catch (e) {
+      console.warn('Could not load context history');
+    }
+  }, []);
 
   if (!isOpen) return null;
+
+  // Don't render if Synapse not available (graceful degradation)
+  if (!synapseReady) {
+    return (
+      <motion.div
+        initial={{ x: 400, opacity: 0 }}
+        animate={{ x: 0, opacity: 1 }}
+        exit={{ x: 400, opacity: 0 }}
+        className="fixed right-0 top-0 h-full w-[380px] bg-[#0A0A0A]/95 backdrop-blur-xl border-l border-white/10 z-40 flex flex-col shadow-2xl"
+      >
+        <div className="flex items-center justify-between p-4 border-b border-white/10">
+          <div className="flex items-center gap-3">
+            <div className={`p-2 rounded-xl ${theme.softBg} border ${theme.primaryBorder}`}>
+              <Brain size={18} className={theme.accentText} />
+            </div>
+            <div>
+              <h3 className="text-sm font-bold text-white">Active Context</h3>
+              <p className="text-[10px] text-gray-500">Initializing...</p>
+            </div>
+          </div>
+          <button
+            onClick={onClose}
+            className="p-2 hover:bg-white/5 rounded-lg transition-colors text-gray-400 hover:text-white"
+          >
+            <X size={16} />
+          </button>
+        </div>
+
+        <div className="flex-1 flex items-center justify-center px-4">
+          <div className="text-center">
+            <Brain size={32} className="text-gray-700 mb-3 mx-auto animate-pulse" />
+            <p className="text-xs text-gray-600">Synapse not available</p>
+            <p className="text-[10px] text-gray-700 mt-1">
+              Enable in settings or check backend connection
+            </p>
+          </div>
+        </div>
+      </motion.div>
+    );
+  }
 
   return (
     <motion.div
@@ -295,7 +470,9 @@ export const ActiveContext = ({ currentView, currentInput, isOpen, onClose, onNa
           </div>
           <div>
             <h3 className="text-sm font-bold text-white">Active Context</h3>
-            <p className="text-[10px] text-gray-500">AI-powered workspace awareness</p>
+            <p className="text-[10px] text-gray-500">
+              {isLoading ? 'Analyzing...' : 'AI-powered workspace awareness'}
+            </p>
           </div>
         </div>
         <div className="flex items-center gap-2">
@@ -329,7 +506,7 @@ export const ActiveContext = ({ currentView, currentInput, isOpen, onClose, onNa
         )}
 
         {/* Smart Suggestions */}
-        {!isLoading && smartSuggestions.length > 0 && (
+        {!isLoading && !error && smartSuggestions.length > 0 && (
           <div>
             <div className="flex items-center gap-2 mb-3">
               <Lightbulb size={14} className="text-yellow-400" />
@@ -352,7 +529,17 @@ export const ActiveContext = ({ currentView, currentInput, isOpen, onClose, onNa
 
         {/* Main Context Items */}
         <AnimatePresence mode="popLayout">
-          {isLoading && (
+          {/* Error State */}
+          {error && (
+            <ErrorState 
+              theme={theme} 
+              message={error}
+              onRetry={handleRetry}
+            />
+          )}
+
+          {/* Loading State */}
+          {isLoading && !error && (
             <motion.div
               initial={{ opacity: 0 }}
               animate={{ opacity: 1 }}
@@ -364,7 +551,8 @@ export const ActiveContext = ({ currentView, currentInput, isOpen, onClose, onNa
             </motion.div>
           )}
 
-          {!isLoading && contextItems.length === 0 && currentInput && (
+          {/* No Results State */}
+          {!isLoading && !error && contextItems.length === 0 && currentInput && (
             <motion.div
               initial={{ opacity: 0 }}
               animate={{ opacity: 1 }}
@@ -377,7 +565,8 @@ export const ActiveContext = ({ currentView, currentInput, isOpen, onClose, onNa
             </motion.div>
           )}
 
-          {!isLoading && contextItems.length === 0 && !currentInput && (
+          {/* Empty State */}
+          {!isLoading && !error && contextItems.length === 0 && !currentInput && (
             <motion.div
               initial={{ opacity: 0 }}
               animate={{ opacity: 1 }}
@@ -392,7 +581,8 @@ export const ActiveContext = ({ currentView, currentInput, isOpen, onClose, onNa
             </motion.div>
           )}
 
-          {!isLoading && contextItems.length > 0 && (
+          {/* Results */}
+          {!isLoading && !error && contextItems.length > 0 && (
             <div>
               <div className="flex items-center gap-2 mb-3">
                 <Link2 size={14} className={theme.accentText} />

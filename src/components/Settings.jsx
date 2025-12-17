@@ -5,7 +5,7 @@ import {
   Terminal, BookOpen, Shield, Zap, Check, ChevronDown, RefreshCw, 
   Sparkles, Info, Github, Bug, FileText, ExternalLink, Download, CheckCircle, Loader2,
   Trash2, MessageSquare, HardDrive, AlertTriangle, Calendar, Activity, 
-  Wifi, WifiOff, CheckCheck, Clock, Palette, Eye, Moon, Sun
+  Wifi, WifiOff, CheckCheck, Clock, Eye, TrendingUp, BarChart3, Layers
 } from 'lucide-react';
 import { motion, AnimatePresence } from 'framer-motion';
 
@@ -140,7 +140,82 @@ const StatusIndicator = ({ status }) => {
   );
 };
 
-// --- CONFIRMATION MODAL FOR DELETIONS ---
+// --- TOGGLE SWITCH COMPONENT ---
+const ToggleSwitch = React.memo(({ enabled, onChange, label, desc, theme }) => (
+  <div className="flex items-center justify-between p-4 bg-[#0A0A0A] border border-white/10 rounded-xl hover:bg-white/5 transition-all">
+    <div className="flex-1">
+      <div className="text-xs font-semibold text-gray-300 mb-1">{label}</div>
+      {desc && <div className="text-[10px] text-gray-500">{desc}</div>}
+    </div>
+    <button
+      onClick={() => onChange(!enabled)}
+      className={`relative w-12 h-6 rounded-full transition-all duration-300 ${
+        enabled ? `bg-gradient-to-r ${theme.gradient}` : 'bg-gray-700'
+      }`}
+    >
+      <motion.div
+        animate={{ x: enabled ? 26 : 2 }}
+        transition={{ type: "spring", stiffness: 500, damping: 30 }}
+        className="absolute top-1 w-4 h-4 bg-white rounded-full shadow-lg"
+      />
+    </button>
+  </div>
+));
+ToggleSwitch.displayName = 'ToggleSwitch';
+
+// --- SYNAPSE STATS CARD ---
+const SynapseStatsCard = ({ stats, theme }) => {
+  if (!stats) return null;
+
+  return (
+    <motion.div
+      initial={{ opacity: 0, y: 10 }}
+      animate={{ opacity: 1, y: 0 }}
+      className="p-5 bg-gradient-to-br from-white/5 to-transparent rounded-xl border border-white/10"
+    >
+      <div className="flex items-center gap-2 mb-4">
+        <div className={`p-2 rounded-lg ${theme.softBg}`}>
+          <BarChart3 size={16} className={theme.accent} />
+        </div>
+        <div>
+          <h4 className="text-xs font-bold text-white">Context Intelligence Stats</h4>
+          <p className="text-[10px] text-gray-500">Current index metrics</p>
+        </div>
+      </div>
+
+      <div className="grid grid-cols-3 gap-3">
+        <div className="p-3 bg-black/30 rounded-lg border border-white/5">
+          <div className="text-[10px] text-gray-500 mb-1">Total Chunks</div>
+          <div className="text-lg font-bold text-white">{stats.totalChunks || 0}</div>
+        </div>
+        <div className="p-3 bg-black/30 rounded-lg border border-white/5">
+          <div className="text-[10px] text-gray-500 mb-1">Sources</div>
+          <div className="text-lg font-bold text-white">{stats.totalSources || 0}</div>
+        </div>
+        <div className="p-3 bg-black/30 rounded-lg border border-white/5">
+          <div className="text-[10px] text-gray-500 mb-1">Avg Size</div>
+          <div className="text-lg font-bold text-white">{Math.round(stats.avgChunkSize || 0)}</div>
+        </div>
+      </div>
+
+      {stats.sourceBreakdown && Object.keys(stats.sourceBreakdown).length > 0 && (
+        <div className="mt-4 pt-4 border-t border-white/5">
+          <div className="text-[10px] text-gray-500 mb-2">Source Breakdown</div>
+          <div className="space-y-2">
+            {Object.entries(stats.sourceBreakdown).map(([source, count]) => (
+              <div key={source} className="flex items-center justify-between text-xs">
+                <span className="text-gray-400 capitalize">{source}</span>
+                <span className="text-white font-bold">{count}</span>
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
+    </motion.div>
+  );
+};
+
+// --- CONFIRMATION MODAL ---
 const ConfirmationModal = ({ isOpen, onClose, onConfirm, title, message, keyword, theme }) => {
   const [inputValue, setInputValue] = useState('');
   const [error, setError] = useState('');
@@ -172,7 +247,6 @@ const ConfirmationModal = ({ isOpen, onClose, onConfirm, title, message, keyword
         onClick={(e) => e.stopPropagation()}
         className="bg-[#0F0F0F] border-2 border-red-500/30 rounded-2xl w-full max-w-md shadow-2xl p-6 relative overflow-hidden"
       >
-        {/* Animated background */}
         <div className="absolute top-0 right-0 w-64 h-64 bg-gradient-to-br from-red-500/10 to-transparent blur-3xl pointer-events-none"></div>
         
         <div className="relative z-10">
@@ -239,20 +313,14 @@ const ConfirmationModal = ({ isOpen, onClose, onConfirm, title, message, keyword
 };
 
 export const Settings = ({ isOpen, onClose }) => {
-  const { settings, updateSettings, availableModels, refreshModels, factoryReset } = useLumina();
+  const { settings, updateSettings, availableModels, refreshModels, factoryReset, synapseStats, synapseReady, refreshSynapseStats } = useLumina();
   const [form, setForm] = useState(settings);
   const [activeTab, setActiveTab] = useState('capabilities');
   const [isRefreshing, setIsRefreshing] = useState(false);
   const [hasChanges, setHasChanges] = useState(false);
-  const [saveStatus, setSaveStatus] = useState('idle'); // idle, saving, saved
-  
-  // --- CONFIRMATION MODAL STATE ---
+  const [saveStatus, setSaveStatus] = useState('idle');
   const [confirmModal, setConfirmModal] = useState({ isOpen: false, type: '', keyword: '', message: '' });
-  
-  // OLLAMA CONNECTION STATE
   const [connectionStatus, setConnectionStatus] = useState('idle'); 
-
-  // UPDATE STATE
   const [updateStatus, setUpdateStatus] = useState('idle'); 
   const [updateMessage, setUpdateMessage] = useState('');
   const [downloadProgress, setDownloadProgress] = useState(0);
@@ -261,7 +329,6 @@ export const Settings = ({ isOpen, onClose }) => {
 
   useEffect(() => { setForm(settings); setHasChanges(false); }, [settings]);
 
-  // Setup Update Listener
   useEffect(() => {
     if (window.lumina && window.lumina.onUpdateMessage) {
       const cleanup = window.lumina.onUpdateMessage((data) => {
@@ -273,7 +340,6 @@ export const Settings = ({ isOpen, onClose }) => {
     }
   }, []);
 
-  // Check Ollama health
   const checkOllamaHealth = useCallback(async (url) => {
     setConnectionStatus('checking');
     try {
@@ -336,6 +402,10 @@ export const Settings = ({ isOpen, onClose }) => {
       keyword = 'DELETE CALENDAR';
       title = 'Delete All Calendar Events';
       message = 'This will permanently delete all your calendar events and schedules. This action cannot be undone.';
+    } else if (type === 'synapse') {
+      keyword = 'DELETE SYNAPSE';
+      title = 'Delete Context Index';
+      message = 'This will delete the entire context intelligence index. It will rebuild automatically as you work.';
     } else if (type === 'factory') {
       keyword = 'FACTORY RESET';
       title = 'Factory Reset';
@@ -361,6 +431,9 @@ export const Settings = ({ isOpen, onClose }) => {
         await window.lumina.deleteCache();
       } else if (type === 'calendar') {
         await window.lumina.deleteCalendar();
+      } else if (type === 'synapse') {
+        await window.lumina.synapse?.clearIndex?.();
+        await refreshSynapseStats();
       } else if (type === 'factory') {
         await factoryReset();
         onClose();
@@ -368,7 +441,7 @@ export const Settings = ({ isOpen, onClose }) => {
     } catch (error) {
       console.error('Reset error:', error);
     }
-  }, [confirmModal.type, factoryReset, onClose]);
+  }, [confirmModal.type, factoryReset, onClose, refreshSynapseStats]);
 
   const checkForUpdates = () => {
     if (window.lumina && window.lumina.checkForUpdates) {
@@ -415,7 +488,6 @@ export const Settings = ({ isOpen, onClose }) => {
           exit={{ scale: 0.95, opacity: 0, y: 20 }}
           className="bg-[#030304] w-full max-w-6xl h-[800px] max-h-[90vh] rounded-3xl border border-white/10 shadow-2xl flex flex-col overflow-hidden relative"
         >
-          {/* Background effects */}
           <div className="absolute inset-0 bg-noise opacity-20 pointer-events-none"></div>
           <div className={`absolute top-0 left-0 w-full h-1 bg-gradient-to-r ${localTheme.gradient}`}></div>
           <div className={`absolute top-0 right-0 w-96 h-96 bg-gradient-to-br ${localTheme.gradient} opacity-5 blur-3xl pointer-events-none`}></div>
@@ -474,6 +546,15 @@ export const Settings = ({ isOpen, onClose }) => {
                 desc="LLM & Connection" 
                 theme={localTheme}
                 badge={connectionStatus === 'error'}
+              />
+              <NavButton 
+                active={activeTab === 'synapse'} 
+                onClick={() => setActiveTab('synapse')} 
+                icon={Layers} 
+                label="Context Intelligence" 
+                desc="Synapse System" 
+                theme={localTheme}
+                badge={!synapseReady}
               />
               <NavButton 
                 active={activeTab === 'interface'} 
@@ -717,6 +798,124 @@ export const Settings = ({ isOpen, onClose }) => {
                     </div>
                   )}
 
+                  {activeTab === 'synapse' && (
+                    <div className="space-y-8">
+                      <div>
+                        <h3 className="text-2xl font-bold text-white mb-2">Context Intelligence System</h3>
+                        <p className="text-sm text-gray-400 mb-6">
+                          Synapse intelligently indexes and retrieves relevant context from your workspace to enhance AI responses.
+                        </p>
+                      </div>
+
+                      <Section 
+                        title="System Control" 
+                        icon={Brain} 
+                        theme={localTheme}
+                        description="Enable or disable the context intelligence system"
+                      >
+                        <ToggleSwitch
+                          enabled={form.synapseEnabled}
+                          onChange={(value) => handleFormChange({ synapseEnabled: value })}
+                          label="Enable Context Intelligence"
+                          desc="When enabled, Synapse automatically indexes meaningful content and provides relevant context to AI responses."
+                          theme={localTheme}
+                        />
+
+                        {form.synapseEnabled && !synapseReady && (
+                          <motion.div
+                            initial={{ opacity: 0, y: -10 }}
+                            animate={{ opacity: 1, y: 0 }}
+                            className="flex items-center gap-3 p-4 bg-yellow-500/10 border border-yellow-500/20 rounded-xl"
+                          >
+                            <AlertTriangle size={20} className="text-yellow-400 flex-shrink-0" />
+                            <div>
+                              <div className="text-xs font-bold text-yellow-400 mb-1">Synapse Not Ready</div>
+                              <div className="text-[10px] text-yellow-400/70">
+                                The context system is enabled but not initialized. Check your backend connection.
+                              </div>
+                            </div>
+                          </motion.div>
+                        )}
+
+                        {form.synapseEnabled && synapseReady && (
+                          <motion.div
+                            initial={{ opacity: 0, y: -10 }}
+                            animate={{ opacity: 1, y: 0 }}
+                            className="flex items-center gap-3 p-4 bg-green-500/10 border border-green-500/20 rounded-xl"
+                          >
+                            <CheckCircle size={20} className="text-green-400 flex-shrink-0" />
+                            <div className="flex-1">
+                              <div className="text-xs font-bold text-green-400 mb-1">Synapse Active</div>
+                              <div className="text-[10px] text-green-400/70">
+                                Context intelligence is running and indexing your workspace.
+                              </div>
+                            </div>
+                            <button
+                              onClick={refreshSynapseStats}
+                              className="px-3 py-1.5 rounded-lg bg-white/5 hover:bg-white/10 text-xs font-medium text-green-400 transition-all flex items-center gap-1.5"
+                            >
+                              <RefreshCw size={12} />
+                              Refresh
+                            </button>
+                          </motion.div>
+                        )}
+                      </Section>
+
+                      {synapseReady && synapseStats && (
+                        <Section 
+                          title="Intelligence Metrics" 
+                          icon={TrendingUp} 
+                          theme={localTheme}
+                          description="Current context index statistics and performance"
+                        >
+                          <SynapseStatsCard stats={synapseStats} theme={localTheme} />
+                        </Section>
+                      )}
+
+                      <Section 
+                        title="Smart Indexing Rules" 
+                        icon={Sparkles} 
+                        theme={localTheme}
+                        description="Synapse uses intelligent filtering to index only meaningful content"
+                      >
+                        <div className="p-5 bg-[#0A0A0A] border border-white/10 rounded-xl space-y-4">
+                          <div className="flex items-start gap-3">
+                            <div className="p-2 rounded-lg bg-green-500/10 text-green-400 flex-shrink-0">
+                              <Check size={16} />
+                            </div>
+                            <div>
+                              <div className="text-xs font-bold text-white mb-1">What Gets Indexed</div>
+                              <ul className="text-[10px] text-gray-400 space-y-1 leading-relaxed">
+                                <li>• Content longer than 50 characters</li>
+                                <li>• Canvas notes and diagrams</li>
+                                <li>• Project files and documentation</li>
+                                <li>• Calendar events with descriptions</li>
+                                <li>• Zenith documents and writing</li>
+                              </ul>
+                            </div>
+                          </div>
+
+                          <div className="h-px bg-white/5"></div>
+
+                          <div className="flex items-start gap-3">
+                            <div className="p-2 rounded-lg bg-gray-500/10 text-gray-400 flex-shrink-0">
+                              <X size={16} />
+                            </div>
+                            <div>
+                              <div className="text-xs font-bold text-white mb-1">What Gets Skipped</div>
+                              <ul className="text-[10px] text-gray-400 space-y-1 leading-relaxed">
+                                <li>• Simple questions ("what is...", "how do I...")</li>
+                                <li>• Short messages under 50 characters</li>
+                                <li>• Greetings and acknowledgments</li>
+                                <li>• Commands and quick queries</li>
+                              </ul>
+                            </div>
+                          </div>
+                        </div>
+                      </Section>
+                    </div>
+                  )}
+
                   {activeTab === 'interface' && (
                     <div className="space-y-8">
                       <Section 
@@ -803,11 +1002,12 @@ export const Settings = ({ isOpen, onClose }) => {
                           label="Delete Specific Data" 
                           desc="Remove individual data types while preserving others."
                         >
-                          <div className="grid grid-cols-3 gap-3">
+                          <div className="grid grid-cols-2 lg:grid-cols-4 gap-3">
                             {[
                               { type: 'chats', icon: MessageSquare, label: 'Chats', desc: 'Sessions only' },
                               { type: 'cache', icon: HardDrive, label: 'Cache', desc: 'Web research' },
-                              { type: 'calendar', icon: Calendar, label: 'Calendar', desc: 'Events only' }
+                              { type: 'calendar', icon: Calendar, label: 'Calendar', desc: 'Events only' },
+                              { type: 'synapse', icon: Brain, label: 'Context Index', desc: 'Synapse data' }
                             ].map(({ type, icon: Icon, label, desc }) => (
                               <motion.button 
                                 key={type}
@@ -840,7 +1040,7 @@ export const Settings = ({ isOpen, onClose }) => {
                               </div>
                               <div>
                                 <h4 className="text-red-400 font-bold text-sm mb-1.5">Factory Reset</h4>
-                                <p className="text-red-400/70 text-xs leading-relaxed">Permanently delete all data including chats, projects, cache, calendar, and settings. This action is irreversible.</p>
+                                <p className="text-red-400/70 text-xs leading-relaxed">Permanently delete all data including chats, projects, cache, calendar, context index, and settings. This action is irreversible.</p>
                               </div>
                             </div>
                             <button 
@@ -1033,7 +1233,7 @@ export const Settings = ({ isOpen, onClose }) => {
           {/* Footer */}
           <div className="p-6 border-t border-white/5 bg-[#020202]/80 backdrop-blur-sm flex justify-between items-center relative z-10">
             <div className="flex items-center gap-3">
-              <div className="text-[10px] text-gray-600 font-mono">Brainless</div>
+              <div className="text-[10px] text-gray-600 font-mono">Brainless v3.0</div>
               {hasChanges && (
                 <motion.div 
                   initial={{ scale: 0, opacity: 0 }}
