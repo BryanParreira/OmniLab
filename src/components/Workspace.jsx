@@ -1,9 +1,9 @@
-import React, { useState, useEffect, useCallback, useRef } from 'react';
+import React, { useState, useEffect, useCallback, useRef, useMemo } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { 
   Brain, X, ArrowUp, User, StopCircle, Download, Check, Info, Code2, Eye, Sparkles,
   FlaskConical, PenTool, BrainCircuit, GraduationCap, ShieldAlert, Zap, BookOpen, Layers,
-  Image as ImageIcon, File as FileIcon, Paperclip, WifiOff, History, TrendingUp
+  Image as ImageIcon, File as FileIcon, Paperclip, WifiOff
 } from 'lucide-react';
 import Markdown from 'react-markdown';
 import remarkGfm from 'remark-gfm'; 
@@ -12,18 +12,6 @@ import { vscDarkPlus } from 'react-syntax-highlighter/dist/esm/styles/prism';
 import clsx from 'clsx'; 
 import { useLumina } from '../context/LuminaContext';
 import { LabBench } from './LabBench';
-import { ContextBreadcrumbs } from './ContextBreadcrumbs';
-
-const COMMAND_REGISTRY = {
-  '/explain_simple': "Explain this simply for a beginner.",
-  '/quiz': "Create a short, interactive quiz.",
-  '/study': "Create a comprehensive study guide.",
-  '/outline': "Create a detailed essay outline.",
-  '/review': "Perform a Senior Code Review.",
-  '/audit': "Perform a Security Audit.",
-  '/test': "Generate a Unit Test suite.",
-  '/refactor': "Refactor this code to be cleaner."
-};
 
 const useSmoothStream = (content, isStreaming) => {
   const [displayContent, setDisplayContent] = useState(content);
@@ -58,7 +46,7 @@ const ThinkingIndicator = ({ theme }) => (
     </div>
     <div className="flex flex-col justify-center h-full gap-1">
       <span className={`text-[10px] font-bold tracking-wider uppercase ${theme.accentText} opacity-70`}>
-        Processing
+        {theme.mode === 'FORGE' ? 'Compiling' : 'Thinking'}
       </span>
       <div className="flex gap-1">
         <div className={`w-1 h-1 rounded-full ${theme.primaryBg} animate-bounce [animation-delay:-0.3s]`} />
@@ -158,68 +146,7 @@ const Callout = ({ children, theme }) => (
   </div>
 );
 
-const ContextHistoryViewer = ({ contexts, isOpen, onClose, theme }) => {
-  if (!isOpen || !contexts || contexts.length === 0) return null;
-  
-  return (
-    <motion.div
-      initial={{ opacity: 0, scale: 0.95 }}
-      animate={{ opacity: 1, scale: 1 }}
-      exit={{ opacity: 0, scale: 0.95 }}
-      className="fixed inset-0 bg-black/80 backdrop-blur-sm z-50 flex items-center justify-center p-6"
-      onClick={onClose}
-    >
-      <div className="bg-[#0A0A0A] border border-white/20 rounded-2xl max-w-2xl w-full max-h-[80vh] overflow-hidden" onClick={(e) => e.stopPropagation()}>
-        <div className="p-6 border-b border-white/10">
-          <div className="flex items-center justify-between">
-            <div className="flex items-center gap-3">
-              <div className={`p-2 rounded-xl ${theme.softBg}`}>
-                <History size={20} className={theme.accentText} />
-              </div>
-              <div>
-                <h3 className="text-lg font-bold text-white">Context Used in Last Response</h3>
-                <p className="text-xs text-gray-500 mt-1">{contexts.length} sources • Showing what the AI referenced</p>
-              </div>
-            </div>
-            <button onClick={onClose} className="p-2 hover:bg-white/10 rounded-lg transition-colors text-gray-400 hover:text-white">
-              <X size={18} />
-            </button>
-          </div>
-        </div>
-        
-        <div className="p-6 overflow-y-auto max-h-[60vh] space-y-3 custom-scrollbar">
-          {contexts.map((ctx, idx) => (
-            <div key={idx} className="p-4 bg-white/5 rounded-xl border border-white/10 hover:bg-white/10 transition-colors">
-              <div className="flex items-center justify-between mb-3">
-                <div className="flex items-center gap-2">
-                  <span className={`text-xs px-2 py-1 rounded ${theme.softBg} ${theme.accentText} font-bold uppercase`}>
-                    {ctx.source}
-                  </span>
-                  <span className="text-xs text-gray-600">
-                    {ctx.metadata?.filename || ctx.metadata?.title || 'Untitled'}
-                  </span>
-                </div>
-                <div className="flex items-center gap-1 text-xs">
-                  <TrendingUp size={12} className="text-green-400" />
-                  <span className="text-green-400 font-bold">{Math.round(ctx.relevance || 0)}%</span>
-                </div>
-              </div>
-              <p className="text-sm text-gray-300 mb-3 leading-relaxed">{ctx.content}</p>
-              {ctx.explanation && (
-                <div className="flex items-start gap-2 p-2 bg-black/30 rounded-lg">
-                  <Info size={12} className="text-blue-400 mt-0.5 flex-shrink-0" />
-                  <span className="text-[10px] text-gray-500">{ctx.explanation}</span>
-                </div>
-              )}
-            </div>
-          ))}
-        </div>
-      </div>
-    </motion.div>
-  );
-};
-
-const MessageBubble = React.memo(({ msg, theme, fontSize, isStreaming, contextUsed, onShowContext }) => {
+const MessageBubble = React.memo(({ msg, theme, fontSize, isStreaming }) => {
   const smoothContent = useSmoothStream(msg.content, isStreaming);
 
   const mainContent = React.useMemo(() => {
@@ -254,15 +181,8 @@ const MessageBubble = React.memo(({ msg, theme, fontSize, isStreaming, contextUs
 
       <div className={clsx("flex-1 min-w-0 max-w-3xl", isUser ? "flex flex-col items-end" : "")}>
         <div className={clsx("flex items-center gap-2 mb-2", isUser ? "justify-end" : "")}>
-          <span className="text-xs font-semibold text-white/80">{isUser ? 'You' : 'Brainless'}</span>
+          <span className="text-xs font-semibold text-white/80">{isUser ? 'You' : theme.mode === 'FORGE' ? 'Forge' : 'Nexus'}</span>
           {!isUser && <span className={`text-[9px] ${theme.softBg} ${theme.accentText} px-1.5 py-0.5 rounded border border-white/10 uppercase tracking-wider font-bold`}>AI</span>}
-          
-          {!isUser && contextUsed && contextUsed.length > 0 && (
-            <button onClick={onShowContext} className="flex items-center gap-1 text-[9px] px-2 py-1 bg-white/5 hover:bg-white/10 rounded border border-white/10 text-gray-400 hover:text-white transition-colors">
-              <History size={10} />
-              <span>{contextUsed.length} sources</span>
-            </button>
-          )}
         </div>
         
         {isUser && msg.attachments && msg.attachments.length > 0 && (
@@ -345,21 +265,34 @@ const QuickActions = ({ onAction, settings, theme, runFlashpoint, runBlueprint, 
 export const Workspace = () => {
   const { 
     messages, sendMessage, isLoading, isOllamaRunning, settings, theme, activeArtifact, 
-    closeLabBench, runFlashpoint, runBlueprint, setCurrentInput, synapseReady
+    closeLabBench, runFlashpoint, runBlueprint, setCurrentInput
   } = useLumina();
   
   const [input, setInput] = useState("");
   const [attachments, setAttachments] = useState([]);
   const [isDragging, setIsDragging] = useState(false);
-  const [activeContexts, setActiveContexts] = useState([]);
-  const [showContextHistory, setShowContextHistory] = useState(false);
-  const [messageContextMap, setMessageContextMap] = useState(new Map());
   
   const bottomRef = useRef(null);
   const textareaRef = useRef(null);
   const fileInputRef = useRef(null);
   const dropZoneRef = useRef(null);
   const contextFetchTimeoutRef = useRef(null);
+
+  // --- DYNAMIC COMMAND REGISTRY ---
+  // Commands now change behavior based on the mode (Nexus vs Forge)
+  const commandRegistry = useMemo(() => {
+    const isDev = settings.developerMode;
+    return {
+      '/explain': isDev ? "Explain this algorithm in technical detail." : "Explain this simply for a beginner.",
+      '/quiz': isDev ? "Create a technical interview quiz for this topic." : "Create a short, interactive study quiz.",
+      '/study': "Create a comprehensive study guide.",
+      '/outline': "Create a detailed essay outline.",
+      '/review': isDev ? "Perform a Senior Code Review." : "Review this text for grammar and flow.",
+      '/audit': "Perform a Security Audit.",
+      '/test': isDev ? "Generate a Unit Test suite." : "Create a practice test with multiple choice questions.",
+      '/refactor': "Refactor this code to be cleaner."
+    };
+  }, [settings.developerMode]);
 
   useEffect(() => {
     if (contextFetchTimeoutRef.current) clearTimeout(contextFetchTimeoutRef.current);
@@ -397,28 +330,8 @@ export const Workspace = () => {
   const handleSend = useCallback(async () => { 
     if (!input.trim() && attachments.length === 0) return;
     
-    // 🧠 SMART CONTEXT FETCH
-    // We fetch synapse context for historical accuracy, 
-    // but the LIVE context (what's on screen) is now injected directly by sendMessage in LuminaContext.
-    let contexts = [];
-    if (synapseReady && settings.synapseEnabled && window.lumina?.synapse && input.trim().length > 50) {
-      try {
-        const contextPromise = window.lumina.synapse.getContext(input, 'chat');
-        const timeoutPromise = new Promise((_, reject) => setTimeout(() => reject(new Error('timeout')), 2000));
-        contexts = await Promise.race([contextPromise, timeoutPromise]);
-        
-        if (contexts && contexts.length > 0) {
-          setActiveContexts(contexts);
-          const messageIndex = messages.length;
-          setMessageContextMap(prev => new Map(prev).set(messageIndex + 1, contexts));
-          setTimeout(() => setActiveContexts([]), 5000);
-        }
-      } catch (err) {
-        console.debug('🧠 Synapse Context skipped (using live context instead):', err.message);
-      }
-    }
-    
-    const finalPrompt = COMMAND_REGISTRY[input.trim()] || input;
+    // Check registry for slash commands
+    const finalPrompt = commandRegistry[input.trim()] || input;
     
     let processedAttachments = [];
     if (attachments.length > 0) {
@@ -440,7 +353,7 @@ export const Workspace = () => {
     sendMessage(finalPrompt, processedAttachments); 
     setInput(""); 
     setAttachments([]);
-  }, [input, attachments, sendMessage, messages, synapseReady, settings.synapseEnabled]);
+  }, [input, attachments, sendMessage, commandRegistry]);
 
   const handleKeyDown = useCallback((e) => { if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); handleSend(); } }, [handleSend]);
   const handleQuickAction = useCallback((prompt) => { setInput(prompt); setTimeout(() => textareaRef.current?.focus(), 0); }, []);
@@ -485,14 +398,6 @@ export const Workspace = () => {
               <MessageBubble 
                 key={idx} msg={msg} theme={theme} fontSize={settings.fontSize} 
                 isStreaming={isLoading && idx === messages.length - 1}
-                contextUsed={messageContextMap.get(idx)}
-                onShowContext={() => {
-                  const contexts = messageContextMap.get(idx);
-                  if (contexts && contexts.length > 0) {
-                    setActiveContexts(contexts);
-                    setShowContextHistory(true);
-                  }
-                }}
               />
             ))}
             <div ref={bottomRef} />
@@ -501,15 +406,6 @@ export const Workspace = () => {
         
         <div className="absolute bottom-0 left-0 right-0 bg-gradient-to-t from-[#000000] via-[#000000] to-transparent pt-20 pb-4">
           <div className="max-w-3xl mx-auto pointer-events-auto flex flex-col gap-3 px-6">
-            {/* 🎯 CENTER BOTTOM CONTEXT DISPLAY */}
-            <AnimatePresence>
-              {activeContexts.length > 0 && (
-                <div className="flex justify-center">
-                  <ContextBreadcrumbs contexts={activeContexts} />
-                </div>
-              )}
-            </AnimatePresence>
-
             {!isLoading && messages.length > 0 && (
               <QuickActions onAction={handleQuickAction} settings={settings} theme={theme} runFlashpoint={runFlashpoint} runBlueprint={runBlueprint} messages={messages} input={input} />
             )}
@@ -531,19 +427,12 @@ export const Workspace = () => {
             <div className="text-center flex items-center justify-center gap-2 opacity-30 hover:opacity-100 transition-opacity duration-500">
               <div className={`w-2 h-2 rounded-full ${isLoading ? 'bg-blue-500 animate-pulse' : 'bg-emerald-500'}`}/>
               <span className="text-[9px] text-gray-600 uppercase tracking-[0.2em] font-medium">
-                Brainless {settings.developerMode ? 'Forge' : 'Nexus'} • Enhanced Synapse v3.0
-                {synapseReady && <span className="text-green-500 ml-2">●</span>}
+                Brainless {settings.developerMode ? 'Forge' : 'Nexus'} • Pure Live Context
               </span>
             </div>
           </div>
         </div>
       </div>
-
-      <AnimatePresence>
-        {showContextHistory && (
-          <ContextHistoryViewer contexts={activeContexts} isOpen={showContextHistory} onClose={() => setShowContextHistory(false)} theme={theme} />
-        )}
-      </AnimatePresence>
 
       {activeArtifact && <LabBench artifacts={[activeArtifact]} onClose={closeLabBench} theme={theme} />}
     </div>

@@ -41,13 +41,14 @@ export const LuminaProvider = ({ children }) => {
     systemPrompt: "",
     developerMode: false,
     fontSize: 14,
-    chatDensity: 'comfortable',
-    synapseEnabled: true
+    chatDensity: 'comfortable'
   });
 
+  // --- THEME ENGINE: STRICT MODE SEPARATION ---
   const theme = useMemo(() => {
     const isDev = settings.developerMode;
     return {
+      mode: isDev ? 'FORGE' : 'NEXUS',
       primary: isDev ? 'text-rose-500' : 'text-indigo-500',
       primaryBg: isDev ? 'bg-rose-600' : 'bg-indigo-600',
       primaryBorder: isDev ? 'border-rose-500/50' : 'border-indigo-500/50',
@@ -88,60 +89,11 @@ export const LuminaProvider = ({ children }) => {
   const [timeMachineSnapshots, setTimeMachineSnapshots] = useState([]);
   const [currentSnapshotIndex, setCurrentSnapshotIndex] = useState(-1);
   const [timeMachineOpen, setTimeMachineOpen] = useState(false);
-  const [synapseStats, setSynapseStats] = useState(null);
-  const [synapseReady, setSynapseReady] = useState(false);
   const [canvasNodes, setCanvasNodes] = useState([]);
   const [canvasConnections, setCanvasConnections] = useState([]);
+  const [zenithFiles, setZenithFiles] = useState([]);
 
-  const indexingQueueRef = useRef([]);
-  const isIndexingRef = useRef(false);
-
-  const processIndexingQueue = useCallback(async () => {
-    if (isIndexingRef.current || indexingQueueRef.current.length === 0) return;
-    if (!window.lumina?.synapse || !settings.synapseEnabled) return;
-
-    isIndexingRef.current = true;
-
-    while (indexingQueueRef.current.length > 0) {
-      const item = indexingQueueRef.current.shift();
-      try {
-        await window.lumina.synapse.index(item.source, item.type, item.content, item.metadata);
-      } catch (err) {
-        console.warn('Background indexing error:', err);
-      }
-      await new Promise(resolve => setTimeout(resolve, 100));
-    }
-
-    isIndexingRef.current = false;
-
-    if (synapseReady) {
-      try {
-        const stats = await window.lumina.synapse.stats();
-        setSynapseStats(stats);
-      } catch (err) {
-        console.warn('Stats refresh error:', err);
-      }
-    }
-  }, [settings.synapseEnabled, synapseReady]);
-
-  const queueForIndexing = useCallback((source, type, content, metadata) => {
-    if (!settings.synapseEnabled || !content) return;
-    
-    const trimmedContent = content.trim();
-    if (trimmedContent.length < 50) return;
-    
-    const isSimpleQuestion = /^(what|how|why|when|where|who|can you|could you|please|help me|tell me)/i.test(trimmedContent);
-    const isShortMessage = trimmedContent.length < 150;
-    
-    if (isSimpleQuestion && isShortMessage) {
-      console.debug('🧠 Skipping simple question');
-      return;
-    }
-    
-    indexingQueueRef.current.push({ source, type, content, metadata });
-    setTimeout(() => processIndexingQueue(), 2000);
-  }, [settings.synapseEnabled, processIndexingQueue]);
-
+  // --- UNDO/REDO SYSTEM ---
   const addToUndoHistory = useCallback((action) => {
     setUndoHistory(prev => [...prev.slice(-19), { ...action, timestamp: Date.now() }]);
     setRedoHistory([]);
@@ -159,6 +111,7 @@ export const LuminaProvider = ({ children }) => {
     if (redoHistory.length === 0) return;
     const lastRedo = redoHistory[redoHistory.length - 1];
     
+    // Simple redo logic for specific types
     if (lastRedo.type === 'add-canvas-node') {
       setCanvasNodes(prev => [...prev, lastRedo.data.node]);
     } else if (lastRedo.type === 'update-canvas-node') {
@@ -227,39 +180,25 @@ export const LuminaProvider = ({ children }) => {
     const newNode = { id: uuidv4(), type, x, y, data: { title: 'New Item', content: '', ...data } };
     setCanvasNodes(prev => [...prev, newNode]);
     
-    if (newNode.data.content) {
-      queueForIndexing('canvas', type, newNode.data.content, {
-        nodeId: newNode.id,
-        title: newNode.data.title
-      });
-    }
-    
     addToUndoHistory({
       type: 'add-canvas-node',
       data: { node: newNode },
       undo: () => setCanvasNodes(prev => prev.filter(n => n.id !== newNode.id))
     });
     return newNode.id;
-  }, [addToUndoHistory, queueForIndexing]);
+  }, [addToUndoHistory]);
 
   const updateCanvasNode = useCallback((id, updates) => {
     const oldNode = canvasNodes.find(n => n.id === id);
     if (!oldNode) return;
     setCanvasNodes(prev => prev.map(n => n.id === id ? { ...n, ...updates } : n));
     
-    if (updates.data?.content && updates.data.content !== oldNode.data.content) {
-      queueForIndexing('canvas', oldNode.type, updates.data.content, {
-        nodeId: id,
-        title: updates.data?.title || oldNode.data.title
-      });
-    }
-    
     addToUndoHistory({
       type: 'update-canvas-node',
       data: { id, oldNode, updates },
       undo: () => setCanvasNodes(prev => prev.map(n => n.id === id ? oldNode : n))
     });
-  }, [canvasNodes, addToUndoHistory, queueForIndexing]);
+  }, [canvasNodes, addToUndoHistory]);
 
   const deleteCanvasNode = useCallback((id) => {
     const deletedNode = canvasNodes.find(n => n.id === id);
@@ -276,49 +215,57 @@ export const LuminaProvider = ({ children }) => {
     });
   }, [canvasNodes, canvasConnections, addToUndoHistory]);
 
+  // Load Zenith files on init
+  const loadZenithFiles = useCallback(async () => {
+    try {
+      if (window.lumina && window.lumina.listFiles) {
+        const files = await window.lumina.listFiles();
+        setZenithFiles(files || []);
+      }
+    } catch (e) {
+      console.warn('Could not load Zenith files:', e);
+      setZenithFiles([]);
+    }
+  }, []);
+
   useEffect(() => {
     const init = async () => {
       try {
         if (!window.lumina) { setIsInitialized(true); return; }
         const s = await window.lumina.loadSettings();
         setSettings(prev => ({ ...prev, ...s }));
+        
         const [r, m, se, p] = await Promise.all([
           window.lumina.checkOllamaStatus(s.ollamaUrl),
           window.lumina.getModels(s.ollamaUrl).catch(() => []),
           window.lumina.getSessions().catch(() => []),
           window.lumina.getProjects().catch(() => [])
         ]);
+        
         setIsOllamaRunning(r);
         setAvailableModels(m);
         setSessions(se);
         setProjects(p);
+        
         try {
           const events = await window.lumina.loadCalendar();
           setCalendarEvents(events || []);
         } catch (e) {}
         
-        if (s.synapseEnabled && window.lumina?.synapse) {
-          try {
-            const stats = await window.lumina.synapse.stats();
-            setSynapseStats(stats);
-            setSynapseReady(true);
-            console.log('🧠 Synapse ready:', stats.totalChunks, 'chunks indexed');
-          } catch (e) {
-            console.warn('Synapse unavailable:', e.message);
-            setSynapseReady(false);
-          }
-        }
+        await loadZenithFiles();
         
         if (m.length > 0) setCurrentModel(m.includes(s.defaultModel) ? s.defaultModel : m[0]);
         setSessionId(uuidv4());
         setIsInitialized(true);
+        
+        console.log(`✅ Brainless initialized - Mode: ${s.developerMode ? 'FORGE' : 'NEXUS'}`);
       } catch (error) {
         console.error('Init error:', error);
         setIsInitialized(true);
       }
     };
     init();
-  }, []);
+  }, [loadZenithFiles]);
 
   useEffect(() => {
     if (!isInitialized) return;
@@ -359,14 +306,6 @@ export const LuminaProvider = ({ children }) => {
       const merged = { ...settings, ...newSettings };
       setSettings(merged);
       if (window.lumina) await window.lumina.saveSettings(merged);
-      
-      if (newSettings.synapseEnabled !== undefined) {
-        if (newSettings.synapseEnabled && window.lumina?.synapse) {
-          setSynapseReady(true);
-        } else {
-          setSynapseReady(false);
-        }
-      }
     } catch (e) {
       console.error('Settings update failed:', e);
     }
@@ -396,8 +335,7 @@ export const LuminaProvider = ({ children }) => {
       setUndoHistory([]);
       setRedoHistory([]);
       setSessionId(uuidv4());
-      setSynapseStats(null);
-      indexingQueueRef.current = [];
+      setZenithFiles([]);
     } catch (e) {
       console.error('Factory reset failed:', e);
     }
@@ -491,21 +429,8 @@ export const LuminaProvider = ({ children }) => {
     }
   }, [isInitialized, loadSnapshotsFromStorage]);
 
-  const refreshSynapseStats = useCallback(async () => {
-    if (!synapseReady || !window.lumina?.synapse) return null;
-    
-    try {
-      const stats = await window.lumina.synapse.stats();
-      setSynapseStats(stats);
-      return stats;
-    } catch (e) {
-      console.error('Synapse stats refresh failed:', e);
-      return null;
-    }
-  }, [synapseReady]);
-
   // =========================================================================
-  // 🚀 CORE AI MESSAGING (WITH SMART FILE CONTENT INJECTION)
+  // 🚀 ULTIMATE: PURE LIVE CONTEXT WITH DUAL-MODE LOGIC (FORGE VS NEXUS)
   // =========================================================================
   const sendMessage = useCallback(async (text, attachments) => {
     const normalizedAttachments = Array.isArray(attachments) ? attachments : [];
@@ -523,6 +448,7 @@ export const LuminaProvider = ({ children }) => {
     let images = [];
     let documentContext = "";
 
+    // Process attachments
     if (normalizedAttachments.length > 0) {
       for (const att of normalizedAttachments) {
         if (att.type === 'image' && att.data) {
@@ -534,11 +460,6 @@ export const LuminaProvider = ({ children }) => {
       }
     }
 
-    const conversationHistory = messages.slice(-10).map(msg => {
-      const role = msg.role === 'user' ? 'USER' : 'ASSISTANT';
-      return `${role}: ${msg.content}`;
-    }).join('\n\n');
-
     messagesDispatch({ 
       type: 'ADD_USER_MESSAGE', 
       payload: { text: text || '', attachments: normalizedAttachments } 
@@ -547,113 +468,164 @@ export const LuminaProvider = ({ children }) => {
     messagesDispatch({ type: 'ADD_ASSISTANT_MESSAGE' });
     setIsLoading(true);
 
-    // 1. Gather Active Project Files
+    // ====================================================================
+    // DUAL-MODE CONTEXT ENGINE
+    // ====================================================================
+    
+    const isForge = settings.developerMode;
     let contextFiles = [];
     let systemPrompt = settings.systemPrompt;
     let pid = null;
+    let enrichedPrompt = text || '';
+    let workspaceContext = "";
     
-    if (activeProject) {
-      pid = activeProject.id;
-      const liveProject = projects.find(p => p.id === activeProject.id);
-      contextFiles = liveProject ? liveProject.files : activeProject.files || [];
-      systemPrompt = liveProject?.systemPrompt || settings.systemPrompt;
-    }
+    const lowerText = text.toLowerCase();
 
-    // 2. LIVE APP STATE (GOD MODE)
-    let liveStateContext = `\n[SYSTEM: LIVE APP STATE VISIBILITY]`;
-    liveStateContext += `\nUser is currently viewing: ${currentView.toUpperCase()} page.`;
-
-    // 3. GLOBAL SMART FILE SEARCH (FIXED: Ignorning .meta files & forcing content read)
-    const mentionedFiles = [];
-    if (projects && projects.length > 0 && text) {
-      const lowerText = text.toLowerCase();
-      projects.forEach(proj => {
-        if (!proj.files) return;
-        proj.files.forEach(file => {
-          // Ignore metadata files or hidden files
-          if (file.name.endsWith('.meta.json') || file.name.startsWith('.')) return;
-
-          // Check if filename (minus extension) appears in the prompt
-          const baseName = file.name.replace(/\.[^/.]+$/, "").toLowerCase();
+    // ----------------------------------------------------------------
+    // MODE 1: THE FORGE (Developer Mode)
+    // ----------------------------------------------------------------
+    if (isForge) {
+      // 1. Prioritize Active Project
+      if (activeProject) {
+        pid = activeProject.id;
+        const liveProject = projects.find(p => p.id === activeProject.id);
+        
+        if (liveProject) {
+          contextFiles = (liveProject.files || []).filter(f => 
+            !f.name.endsWith('.meta.json') && !f.name.startsWith('.')
+          );
+          systemPrompt = liveProject.systemPrompt || settings.systemPrompt;
           
-          // Match if name is in text (e.g. "demo" in "read demo file")
-          if ((baseName.length > 2 && lowerText.includes(baseName)) || lowerText === baseName) {
-             // Avoid duplicates if already in active project context
-             if (!contextFiles.some(cf => cf.path === file.path)) {
-               mentionedFiles.push(file);
-             }
+          workspaceContext += `[FORGE MODE: Project "${liveProject.name}" Active | ${contextFiles.length} files]\n`;
+          
+          // Try to get Git Status if possible
+          if (window.lumina.getGitStatus) {
+            try {
+              const status = await window.lumina.getGitStatus(activeProject.id);
+              if (status) {
+                workspaceContext += `[Git: ${status.current} | Modified: ${status.modified.length}]\n`;
+              }
+            } catch (e) {}
           }
-        });
-      });
-    }
-    
-    // Add found files to the context payload AND inject strict instructions
-    if (mentionedFiles.length > 0) {
-       contextFiles = [...contextFiles, ...mentionedFiles];
-       liveStateContext += `\n\n[SYSTEM INJECTION: I have automatically retrieved ${mentionedFiles.length} specific files referenced by the user. I have attached their FULL CONTENT below. You MUST use this content to answer the user's question directly. Do not say you cannot read files.]`;
-       mentionedFiles.forEach(f => liveStateContext += `\n- Retrieved File: ${f.name}`);
-    }
+        }
+      }
 
-    // 4. Inject Canvas Content (Nodes)
-    if (canvasNodes && canvasNodes.length > 0) {
-      liveStateContext += `\n\n[LIVE CANVAS CONTENT]:\nThe user has ${canvasNodes.length} items on their whiteboard (Canvas).`;
-      canvasNodes.forEach(node => {
-        const contentPreview = node.data.content ? node.data.content.slice(0, 300) : 'Empty';
-        liveStateContext += `\n- Item "${node.data.title || 'Untitled'}" (${node.type}): ${contentPreview}...`;
-      });
-    }
-
-    // 5. Inject Chronos Content (Calendar Events)
-    if (calendarEvents && calendarEvents.length > 0) {
-      const now = new Date();
-      const today = new Date(now.getFullYear(), now.getMonth(), now.getDate());
-      
-      const upcoming = calendarEvents
-        .filter(e => {
-          if (!e.date) return false;
-          const parts = e.date.split('-');
-          const eventDate = new Date(parts[0], parts[1] - 1, parts[2]);
-          return eventDate >= today;
-        })
-        .sort((a, b) => new Date(a.date) - new Date(b.date))
-        .slice(0, 15);
-      
-      if (upcoming.length > 0) {
-        liveStateContext += `\n\n[LIVE CHRONOS CALENDAR SCHEDULE]:`;
-        liveStateContext += `\n(Today is: ${now.toLocaleDateString()})`;
-        upcoming.forEach(e => {
-          liveStateContext += `\n- [${e.date} at ${e.time}] ${e.title} (${e.type}): ${e.notes || ''}`;
+      // 2. Canvas Context (Architecture/Diagrams)
+      if (canvasNodes.length > 0) {
+        workspaceContext += `\n[Canvas Architecture: ${canvasNodes.length} nodes]\n`;
+        canvasNodes.slice(0, 10).forEach(node => {
+          workspaceContext += `• ${node.data.title} (${node.type})\n`;
         });
+      }
+      
+      // 3. Artifacts (Code Snippets)
+      if (artifacts.length > 0) {
+         workspaceContext += `\n[Open Artifacts]\n`;
+         artifacts.forEach(a => workspaceContext += `• ${a.title} (${a.language})\n`);
+      }
+
+      // 4. Force "Zenith" files to the background unless explicitly asked
+      if (lowerText.includes('documentation') || lowerText.includes('zenith')) {
+         // Load them only if requested
+      }
+
+    } 
+    // ----------------------------------------------------------------
+    // MODE 2: THE NEXUS (Student/Research Mode)
+    // ----------------------------------------------------------------
+    else {
+      // 1. Prioritize Zenith (Documents/Writing)
+      if (zenithFiles.length > 0) {
+        // Always read the top 3 most recent files in Nexus mode
+        const recentFiles = zenithFiles
+          .sort((a, b) => new Date(b.modified) - new Date(a.modified))
+          .slice(0, 5);
+        
+        workspaceContext += `[NEXUS MODE: ${zenithFiles.length} Documents Available - Reference ONLY]\n`;
+        
+        for (const file of recentFiles) {
+          try {
+            const content = await window.lumina.readFile(file.name);
+            const preview = content.slice(0, 500); // Larger preview for students
+            workspaceContext += `\n--- DOC: ${file.name} ---\n${preview}\n...[cont]\n`;
+          } catch (e) {
+            workspaceContext += `• ${file.name}\n`;
+          }
+        }
+      }
+
+      // 2. Prioritize Calendar (Study Plans)
+      if (calendarEvents.length > 0) {
+        const now = new Date();
+        const upcoming = calendarEvents
+          .filter(e => new Date(e.date) >= now)
+          .sort((a, b) => new Date(a.date) - new Date(b.date))
+          .slice(0, 5);
+        
+        if (upcoming.length > 0) {
+          // IMPORTANT: Labeled as Reference Only so the AI doesn't "hallucinate" that the user gave it this info.
+          workspaceContext += `\n[SYSTEM DATA: Calendar/Deadlines - Reference Only (Use implicitly, do not list unless asked)]\n`;
+          upcoming.forEach(e => {
+            workspaceContext += `• ${e.date}: ${e.title} (${e.priority})\n`;
+          });
+        }
+      }
+
+      // 3. IGNORE Code Projects unless forced
+      // In Nexus mode, we do NOT automatically load the active project context
+      // to avoid confusing the LLM with code when the user wants to write an essay.
+      if (activeProject && (lowerText.includes('code') || lowerText.includes('project'))) {
+         workspaceContext += `\n[Note: Active Project "${activeProject.name}" available but not loaded by default in Nexus]\n`;
       }
     }
 
-    // 6. Inject Zenith Content (Active Project Name)
-    if (activeProject) {
-      liveStateContext += `\n\n[ACTIVE ZENITH PROJECT]: ${activeProject.name}`;
+    // === COMMON CONTEXT ===
+    if (workspaceContext) {
+      enrichedPrompt = workspaceContext + '\n\n' + enrichedPrompt;
     }
     
-    liveStateContext += `\n[END LIVE STATE]\n\n`;
-
-    let enrichedPrompt = text || '';
-    
-    if (conversationHistory && messages.length > 0) {
-      enrichedPrompt = `[CONVERSATION HISTORY]\n${conversationHistory}\n\n[CURRENT MESSAGE]\n${enrichedPrompt}`;
-    }
-    
-    // Prepend the live context so the AI sees it immediately
-    enrichedPrompt = `${liveStateContext}${documentContext}\n\n${enrichedPrompt}`;
-
-    if (images.length > 0) {
-      enrichedPrompt = `[IMPORTANT: You are being shown ${images.length} NEW image(s) with THIS current message.]\n\n${enrichedPrompt}`;
+    // Conversation Memory
+    if (messages.length > 0) {
+      const recentHistory = messages.slice(-5).map(msg => 
+        `${msg.role === 'user' ? 'User' : 'AI'}: ${msg.content.slice(0, 300)}`
+      ).join('\n');
+      enrichedPrompt = `[Conversation History]\n${recentHistory}\n\n${enrichedPrompt}`;
     }
 
+    // === 🎯 PERSONALITY & GUARDRAILS ===
+    const isDev = settings.developerMode;
+    const tonePrompt = isDev 
+        ? `YOU ARE "FORGE": A sharp, efficient, collaborative senior engineer. Be precise, technical, but polite.` 
+        : `YOU ARE "NEXUS": A warm, encouraging, insightful research partner. Be helpful, clear, and engaging.`;
+
+    const antiHallucinationPrompt = `
+    INSTRUCTIONS:
+    - ${tonePrompt}
+    - Information labeled [SYSTEM DATA], [NEXUS MODE], or [FORGE MODE] is BACKGROUND CONTEXT.
+    - Use this background data to be helpful, but do NOT recite it back unless it's relevant to the user's question.
+    - If the user says "hello", respond warmly.
+    - Be professional, polite, and helpful.
+    `;
+    
+    enrichedPrompt = antiHallucinationPrompt + "\n" + enrichedPrompt;
+    
+    // === SEND TO AI ===
     try {
-      window.lumina.sendPrompt(enrichedPrompt, currentModel, contextFiles, systemPrompt, settings, pid, images, documentContext);
+      window.lumina.sendPrompt(
+        enrichedPrompt, 
+        currentModel, 
+        contextFiles, // Only populated if Forge Mode or explicitly requested
+        systemPrompt, 
+        settings, 
+        pid, 
+        images, 
+        documentContext
+      );
     } catch (error) {
       setIsLoading(false);
       messagesDispatch({ type: 'APPEND_TO_LAST', payload: `\n\n**Error:** ${error.message}` });
     }
-  }, [isLoading, currentModel, activeProject, projects, settings, messages, canvasNodes, calendarEvents, currentView]);
+  }, [isLoading, currentModel, activeProject, projects, settings, messages, canvasNodes, calendarEvents, zenithFiles, artifacts]);
 
   const startNewChat = useCallback(async () => {
     if (messages.length > 0) {
@@ -746,11 +718,10 @@ export const LuminaProvider = ({ children }) => {
       setProjects(updatedProjects);
       const updatedActive = updatedProjects.find(p => p.id === activeProject.id);
       if (updatedActive) setActiveProject(updatedActive);
-      setTimeout(() => refreshSynapseStats(), 1000);
     } catch (e) {
       console.error('Add files failed:', e);
     }
-  }, [activeProject, refreshSynapseStats]);
+  }, [activeProject]);
 
   const addFolder = useCallback(async () => {
     if (!activeProject) return;
@@ -760,11 +731,10 @@ export const LuminaProvider = ({ children }) => {
       setProjects(updatedProjects);
       const updatedActive = updatedProjects.find(p => p.id === activeProject.id);
       if (updatedActive) setActiveProject(updatedActive);
-      setTimeout(() => refreshSynapseStats(), 1000);
     } catch (e) {
       console.error('Add folder failed:', e);
     }
-  }, [activeProject, refreshSynapseStats]);
+  }, [activeProject]);
 
   const addUrl = useCallback(async (url) => {
     if (!activeProject) return;
@@ -774,11 +744,10 @@ export const LuminaProvider = ({ children }) => {
       setProjects(updatedProjects);
       const updatedActive = updatedProjects.find(p => p.id === activeProject.id);
       if (updatedActive) setActiveProject(updatedActive);
-      setTimeout(() => refreshSynapseStats(), 1000);
     } catch (e) {
       console.error('Add URL failed:', e);
     }
-  }, [activeProject, refreshSynapseStats]);
+  }, [activeProject]);
 
   const openFile = useCallback(async (file) => {
     if (file.type === 'url') {
@@ -822,8 +791,7 @@ export const LuminaProvider = ({ children }) => {
         await window.lumina.saveCalendar(reverted);
       }
     });
-    setTimeout(() => refreshSynapseStats(), 500);
-  }, [calendarEvents, addToUndoHistory, refreshSynapseStats]);
+  }, [calendarEvents, addToUndoHistory]);
 
   const deleteEvent = useCallback(async (id) => {
     const deletedEvent = calendarEvents.find(e => e.id === id);
@@ -871,12 +839,21 @@ export const LuminaProvider = ({ children }) => {
     const diffTime = Math.abs(end - start);
     const diffDays = Math.ceil(diffTime / (1000 * 60 * 60 * 24));
 
-    const steps = [
-      { t: "Research & Outline", p: "medium" },
-      { t: "Core Work / Study", p: "high" },
-      { t: "Deep Dive / Draft", p: "high" },
-      { t: "Review & Refine", p: "medium" },
-      { t: "Final Polish", p: "low" }
+    // Mode-specific scheduling
+    const isDev = settings.developerMode;
+    const steps = isDev ? [
+        { t: "Requirement Analysis", p: "high" },
+        { t: "Architecture Design", p: "high" },
+        { t: "Core Implementation", p: "high" },
+        { t: "Testing & Debugging", p: "medium" },
+        { t: "Refactoring", p: "medium" },
+        { t: "Deployment Prep", p: "low" }
+    ] : [
+        { t: "Research & Outline", p: "medium" },
+        { t: "Core Work / Study", p: "high" },
+        { t: "Deep Dive / Draft", p: "high" },
+        { t: "Review & Refine", p: "medium" },
+        { t: "Final Polish", p: "low" }
     ];
 
     const newEvents = [];
@@ -904,21 +881,26 @@ export const LuminaProvider = ({ children }) => {
       date: targetDate,
       type: 'deadline',
       priority: 'high',
-      notes: 'Final Submission / Test',
+      notes: 'Final Submission / Release',
       time: '23:59'
     });
     const updated = [...calendarEvents, ...newEvents];
     setCalendarEvents(updated);
     if (window.lumina) await window.lumina.saveCalendar(updated);
     setCurrentView('chronos');
-    setTimeout(() => refreshSynapseStats(), 1000);
-  }, [calendarEvents, settings, refreshSynapseStats]);
+  }, [calendarEvents, settings]);
 
   const runFlashpoint = useCallback(async () => {
     if (!currentModel) {
       alert("Please select an AI model first.");
       return;
     }
+    // Strict Nexus feature
+    if (settings.developerMode) {
+        alert("Switch to Nexus mode for Flashcards.");
+        return;
+    }
+
     const context = messages.slice(-6).map(m => `${m.role.toUpperCase()}: ${m.content}`).join('\n\n').slice(0, 4000) || "General Knowledge";
     setIsLoading(true);
     messagesDispatch({ type: 'ADD_USER_MESSAGE', payload: { text: 'Generate a flashcard deck from our current study session.', attachments: [] } });
@@ -945,6 +927,11 @@ export const LuminaProvider = ({ children }) => {
   }, [currentModel, settings, messages]);
 
   const runBlueprint = useCallback(async (description) => {
+    // Strict Forge feature
+    if (!settings.developerMode) {
+        alert("Switch to Forge mode for Scaffolding.");
+        return;
+    }
     if (!activeProject || !currentModel) return;
     setIsLoading(true);
     messagesDispatch({ type: 'ADD_USER_MESSAGE', payload: { text: `Blueprint: ${description}`, attachments: [] } });
@@ -973,7 +960,10 @@ export const LuminaProvider = ({ children }) => {
   }, [activeProject, currentModel, settings]);
 
   const runDiffDoctor = useCallback(async () => {
-    if (!activeProject || !gitStatus || gitStatus.clean) return;
+    // Strict Forge feature
+    if (!settings.developerMode) return;
+    if (!activeProject) return;
+    
     setIsLoading(true);
     messagesDispatch({ type: 'ADD_USER_MESSAGE', payload: { text: 'Run Diff Doctor.', attachments: [] } });
     try {
@@ -983,10 +973,13 @@ export const LuminaProvider = ({ children }) => {
       window.lumina.sendPrompt(prompt, currentModel, [], activeProject.systemPrompt, settings, null, [], "");
     } catch (e) {
       setIsLoading(false);
+      messagesDispatch({ type: 'ADD_ASSISTANT_MESSAGE' });
+      messagesDispatch({ type: 'APPEND_TO_LAST', payload: "No git changes found." });
     }
-  }, [activeProject, gitStatus, currentModel, settings]);
+  }, [activeProject, currentModel, settings]);
 
   const runDeepResearch = useCallback(async (url) => {
+    // Available in both modes, but behaves differently via System Prompt in sendMessage
     if (!activeProject) return;
     setIsLoading(true);
     try {
@@ -1067,7 +1060,7 @@ export const LuminaProvider = ({ children }) => {
     commandPaletteOpen, setCommandPaletteOpen, undoHistory, redoHistory, performUndo, performRedo, addToUndoHistory,
     currentInput, setCurrentInput, handleContextNavigation,
     timeMachineSnapshots, currentSnapshotIndex, setCurrentSnapshotIndex, timeMachineOpen, setTimeMachineOpen, createSnapshot, restoreSnapshot, deleteSnapshot, exportSnapshot,
-    synapseStats, synapseReady, refreshSynapseStats,
+    zenithFiles, loadZenithFiles,
     togglePodcast: () => {
       if (isSpeaking) {
         window.speechSynthesis.cancel();
@@ -1079,7 +1072,7 @@ export const LuminaProvider = ({ children }) => {
         setIsSpeaking(true);
       }
     }
-  }), [messages, sendMessage, isLoading, isOllamaRunning, currentModel, availableModels, settings, updateSettings, refreshModels, factoryReset, theme, isInitialized, sessions, sessionId, startNewChat, loadSession, deleteSession, renameChat, projects, activeProject, createProject, deleteProject, updateProjectSettings, addFiles, addFolder, addUrl, openFile, deleteFile, generateDossier, loadProjects, canvasNodes, addCanvasNode, updateCanvasNode, deleteCanvasNode, canvasConnections, calendarEvents, addEvent, updateEvent, deleteEvent, generateSchedule, currentView, gitStatus, activeArtifact, activeArtifactId, artifacts, openLabBench, closeLabBench, closeArtifact, runFlashpoint, runBlueprint, runDiffDoctor, runDeepResearch, isSettingsOpen, commandPaletteOpen, undoHistory, redoHistory, performUndo, performRedo, addToUndoHistory, currentInput, handleContextNavigation, timeMachineSnapshots, currentSnapshotIndex, timeMachineOpen, createSnapshot, restoreSnapshot, deleteSnapshot, exportSnapshot, synapseStats, synapseReady, refreshSynapseStats, isSpeaking]);
+  }), [messages, sendMessage, isLoading, isOllamaRunning, currentModel, availableModels, settings, updateSettings, refreshModels, factoryReset, theme, isInitialized, sessions, sessionId, startNewChat, loadSession, deleteSession, renameChat, projects, activeProject, createProject, deleteProject, updateProjectSettings, addFiles, addFolder, addUrl, openFile, deleteFile, generateDossier, loadProjects, canvasNodes, addCanvasNode, updateCanvasNode, deleteCanvasNode, canvasConnections, calendarEvents, addEvent, updateEvent, deleteEvent, generateSchedule, currentView, gitStatus, activeArtifact, activeArtifactId, artifacts, openLabBench, closeLabBench, closeArtifact, runFlashpoint, runBlueprint, runDiffDoctor, runDeepResearch, isSettingsOpen, commandPaletteOpen, undoHistory, redoHistory, performUndo, performRedo, addToUndoHistory, currentInput, handleContextNavigation, timeMachineSnapshots, currentSnapshotIndex, timeMachineOpen, createSnapshot, restoreSnapshot, deleteSnapshot, exportSnapshot, zenithFiles, loadZenithFiles, isSpeaking]);
 
   return <LuminaContext.Provider value={contextValue}>{children}</LuminaContext.Provider>;
 };

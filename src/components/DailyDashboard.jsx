@@ -70,11 +70,12 @@ const StatCard = ({ icon: Icon, label, value, trend, trendUp, onClick, theme, gr
 );
 
 // --- TODAY'S EVENT ITEM (Enhanced) ---
-const EventItem = ({ event, index }) => {
+const EventItem = React.forwardRef(({ event, index }, ref) => {
   if (!event) return null;
   
   return (
     <motion.div
+      ref={ref}
       initial={{ opacity: 0, x: -20 }}
       animate={{ opacity: 1, x: 0 }}
       transition={{ delay: index * 0.05 }}
@@ -114,10 +115,12 @@ const EventItem = ({ event, index }) => {
       <ChevronRight size={14} className="text-gray-700 group-hover:text-gray-400 transition-colors" />
     </motion.div>
   );
-};
+});
 
-// --- ACTIVITY ITEM (Enhanced) ---
-const ActivityItem = ({ activity, index }) => {
+EventItem.displayName = 'EventItem';
+
+// --- ACTIVITY ITEM (Enhanced with forwardRef) ---
+const ActivityItem = React.forwardRef(({ activity, index }, ref) => {
   if (!activity) return null;
   
   const Icon = activity.icon || Activity;
@@ -125,6 +128,7 @@ const ActivityItem = ({ activity, index }) => {
   
   return (
     <motion.div
+      ref={ref}
       initial={{ opacity: 0, x: -20 }}
       animate={{ opacity: 1, x: 0 }}
       transition={{ delay: index * 0.05 }}
@@ -143,7 +147,9 @@ const ActivityItem = ({ activity, index }) => {
       <ChevronRight size={12} className="text-gray-700 group-hover:text-gray-500 transition-colors" />
     </motion.div>
   );
-};
+});
+
+ActivityItem.displayName = 'ActivityItem';
 
 // --- QUICK ACTION CARD ---
 const QuickActionCard = ({ title, description, icon: Icon, stats, gradient, onClick }) => (

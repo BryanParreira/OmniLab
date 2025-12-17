@@ -104,47 +104,6 @@ contextBridge.exposeInMainWorld('lumina', {
   },
   
   // ==========================================
-  // 🧠 SYNAPSE ENGINE v3.0 (FIXED)
-  // ==========================================
-  synapse: {
-    // Index content from any source
-    index: (source, type, content, metadata) => 
-      ipcRenderer.invoke('synapse:index', source, type, content, metadata),
-    
-    // Search across all indexed content
-    search: (query, options) => 
-      ipcRenderer.invoke('synapse:search', query, options),
-    
-    // Get active context for AI (FIXED - camelCase to match backend)
-    getContext: (query, currentSource) => 
-      ipcRenderer.invoke('synapse:getContext', query, currentSource),
-    
-    // Record user interaction (FIXED - added missing method)
-    recordInteraction: (chunkId) => 
-      ipcRenderer.invoke('synapse:recordInteraction', chunkId),
-    
-    // Get smart suggestions (FIXED - added missing method)
-    getSmartSuggestions: (currentSource, recentTerms) => 
-      ipcRenderer.invoke('synapse:getSmartSuggestions', currentSource, recentTerms),
-    
-    // Get auto-linked sources (FIXED - added missing method)
-    getLinkedSources: (sourceId) => 
-      ipcRenderer.invoke('synapse:getLinkedSources', sourceId),
-    
-    // Delete indexed content by source ID
-    delete: (sourceId) => 
-      ipcRenderer.invoke('synapse:delete', sourceId),
-    
-    // Get statistics
-    stats: () => 
-      ipcRenderer.invoke('synapse:stats'),
-    
-    // Clear all indexed data
-    clear: () => 
-      ipcRenderer.invoke('synapse:clear')
-  },
-  
-  // ==========================================
   // UPDATER
   // ==========================================
   checkForUpdates: () => ipcRenderer.send('check-for-updates'),
