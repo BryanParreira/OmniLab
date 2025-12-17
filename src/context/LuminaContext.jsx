@@ -504,26 +504,9 @@ export const LuminaProvider = ({ children }) => {
     }
   }, [synapseReady]);
 
-<<<<<<< HEAD
-  // 🔥 HELPER: DETECT CALENDAR QUERIES
-  const detectCalendarQuery = useCallback((text) => {
-    const calendarKeywords = [
-      'calendar', 'schedule', 'meeting', 'event', 'appointment',
-      'deadline', 'tomorrow', 'today', 'next week', 'this week',
-      'upcoming', 'free time', 'busy', 'available', 'when is',
-      'what time', 'do i have', 'am i free'
-    ];
-    
-    const lower = text.toLowerCase();
-    return calendarKeywords.some(keyword => lower.includes(keyword));
-  }, []);
-
-  // --- 🧠 ENHANCED SEND MESSAGE WITH SYNAPSE CONTEXT ---
-=======
   // =========================================================================
   // 🚀 CORE AI MESSAGING (WITH SMART FILE CONTENT INJECTION)
   // =========================================================================
->>>>>>> 93bc05c09dd69d4e83f596f4c212b2eaeccd71f4
   const sendMessage = useCallback(async (text, attachments) => {
     const normalizedAttachments = Array.isArray(attachments) ? attachments : [];
     
@@ -653,97 +636,13 @@ export const LuminaProvider = ({ children }) => {
 
     let enrichedPrompt = text || '';
     
-    // 🧠 LAYER 1: SYNAPSE INTELLIGENT CONTEXT (HIGHEST PRIORITY)
-    let synapseContext = "";
-    if (window.lumina?.synapse && text && settings.synapseEnabled) {
-      try {
-        console.log('🧠 Fetching Synapse context for query:', text.slice(0, 50) + '...');
-        
-        // Boost Chronos results for calendar queries
-        const isCalendarQuery = detectCalendarQuery(text);
-        const searchOptions = isCalendarQuery ? {
-          source: 'chronos', // Only search calendar for calendar queries
-          limit: 10          // Get more results for calendar
-        } : {
-          limit: 5           // Normal search for other queries
-        };
-
-        const relevantChunks = await window.lumina.synapse.search(text, searchOptions);
-        
-        if (relevantChunks && relevantChunks.length > 0) {
-          synapseContext = "\n\n=== RELEVANT CONTEXT FROM YOUR WORKSPACE ===\n";
-          synapseContext += "The following information from your workspace is relevant to this query:\n\n";
-          
-          relevantChunks.forEach((chunk, idx) => {
-            const sourceIcon = {
-              'zenith': '📝',
-              'canvas': '🎨',
-              'chat': '💬',
-              'chronos': '📅'
-            }[chunk.source] || '📄';
-            
-            synapseContext += `${sourceIcon} [${chunk.source.toUpperCase()}] ${chunk.metadata.filename || chunk.metadata.title || chunk.metadata.eventTitle || 'Untitled'}\n`;
-            synapseContext += `   Relevance: ${Math.round(chunk.relevance)}% | ${chunk.explanation}\n`;
-            synapseContext += `   Content: ${chunk.content}\n`;
-            
-            if (chunk.keywords && chunk.keywords.length > 0) {
-              synapseContext += `   Keywords: ${chunk.keywords.join(', ')}\n`;
-            }
-            
-            // Add specific metadata for calendar events
-            if (chunk.source === 'chronos') {
-              if (chunk.metadata.date) {
-                synapseContext += `   Date: ${chunk.metadata.date}\n`;
-              }
-              if (chunk.metadata.time) {
-                synapseContext += `   Time: ${chunk.metadata.time}\n`;
-              }
-              if (chunk.metadata.priority) {
-                synapseContext += `   Priority: ${chunk.metadata.priority}\n`;
-              }
-            }
-            
-            synapseContext += '\n';
-          });
-          
-          synapseContext += "Use this context to provide accurate, personalized answers based on the user's actual workspace data.\n";
-          
-          if (isCalendarQuery) {
-            synapseContext += "IMPORTANT: The user is asking about their calendar/schedule. Use the chronos events above to answer accurately.\n";
-          }
-          
-          synapseContext += "=== END OF WORKSPACE CONTEXT ===\n\n";
-          
-          console.log(`✅ Synapse injected ${relevantChunks.length} relevant chunks into AI prompt${isCalendarQuery ? ' (calendar-focused)' : ''}`);
-        } else {
-          console.log('ℹ️ No relevant Synapse context found for this query');
-        }
-      } catch (error) {
-        console.warn('⚠️ Synapse context fetch failed:', error);
-      }
-    }
-    
-    // Prepend Synapse context to the prompt
-    if (synapseContext) {
-      enrichedPrompt = synapseContext + enrichedPrompt;
-    }
-    
-    // LAYER 2: CONVERSATION HISTORY
     if (conversationHistory && messages.length > 0) {
       enrichedPrompt = `[CONVERSATION HISTORY]\n${conversationHistory}\n\n[CURRENT MESSAGE]\n${enrichedPrompt}`;
     }
     
-<<<<<<< HEAD
-    // LAYER 3: DOCUMENT CONTEXT
-    if (documentContext) {
-      enrichedPrompt = `${documentContext}\n\n${enrichedPrompt}`;
-    }
-=======
     // Prepend the live context so the AI sees it immediately
     enrichedPrompt = `${liveStateContext}${documentContext}\n\n${enrichedPrompt}`;
->>>>>>> 93bc05c09dd69d4e83f596f4c212b2eaeccd71f4
 
-    // LAYER 4: IMAGE CONTEXT
     if (images.length > 0) {
       enrichedPrompt = `[IMPORTANT: You are being shown ${images.length} NEW image(s) with THIS current message.]\n\n${enrichedPrompt}`;
     }
@@ -754,11 +653,7 @@ export const LuminaProvider = ({ children }) => {
       setIsLoading(false);
       messagesDispatch({ type: 'APPEND_TO_LAST', payload: `\n\n**Error:** ${error.message}` });
     }
-<<<<<<< HEAD
-  }, [isLoading, currentModel, activeProject, projects, settings, messages, detectCalendarQuery]);
-=======
   }, [isLoading, currentModel, activeProject, projects, settings, messages, canvasNodes, calendarEvents, currentView]);
->>>>>>> 93bc05c09dd69d4e83f596f4c212b2eaeccd71f4
 
   const startNewChat = useCallback(async () => {
     if (messages.length > 0) {
@@ -918,19 +813,6 @@ export const LuminaProvider = ({ children }) => {
     const updated = [...calendarEvents, ev];
     setCalendarEvents(updated);
     await window.lumina.saveCalendar(updated);
-    
-    // 🧠 AUTO-INDEX EVENT IN SYNAPSE
-    if (window.lumina?.synapse) {
-      const content = `${title}\n\n${notes || ''}\nType: ${type}\nPriority: ${priority}`;
-      window.lumina.synapse.index('chronos', type, content, {
-        eventId: ev.id,
-        eventTitle: title,
-        date: date,
-        time: time || '',
-        priority: priority
-      }).catch(err => console.warn('Synapse index error:', err));
-    }
-    
     addToUndoHistory({
       type: 'add-event',
       data: { event: ev },
@@ -966,20 +848,6 @@ export const LuminaProvider = ({ children }) => {
     const updated = calendarEvents.map(e => e.id === id ? { ...e, ...data } : e);
     setCalendarEvents(updated);
     await window.lumina.saveCalendar(updated);
-    
-    // 🧠 RE-INDEX EVENT IN SYNAPSE
-    const updatedEvent = updated.find(e => e.id === id);
-    if (window.lumina?.synapse && updatedEvent) {
-      const content = `${updatedEvent.title}\n\n${updatedEvent.notes || ''}\nType: ${updatedEvent.type}\nPriority: ${updatedEvent.priority}`;
-      window.lumina.synapse.index('chronos', updatedEvent.type, content, {
-        eventId: updatedEvent.id,
-        eventTitle: updatedEvent.title,
-        date: updatedEvent.date,
-        time: updatedEvent.time || '',
-        priority: updatedEvent.priority
-      }).catch(err => console.warn('Synapse index error:', err));
-    }
-    
     if (oldEvent) {
       addToUndoHistory({
         type: 'update-event',
@@ -991,10 +859,7 @@ export const LuminaProvider = ({ children }) => {
         }
       });
     }
-    
-    // 🧠 Refresh Synapse stats
-    await refreshSynapseStats();
-  }, [calendarEvents, addToUndoHistory, refreshSynapseStats]);
+  }, [calendarEvents, addToUndoHistory]);
 
   const generateSchedule = useCallback(async (topic, targetDate, duration, goals) => {
     if (!topic || !targetDate) {
@@ -1045,21 +910,6 @@ export const LuminaProvider = ({ children }) => {
     const updated = [...calendarEvents, ...newEvents];
     setCalendarEvents(updated);
     if (window.lumina) await window.lumina.saveCalendar(updated);
-    
-    // 🧠 BATCH INDEX ALL GENERATED EVENTS
-    if (window.lumina?.synapse) {
-      for (const ev of newEvents) {
-        const content = `${ev.title}\n\n${ev.notes || ''}\nType: ${ev.type}\nPriority: ${ev.priority}`;
-        await window.lumina.synapse.index('chronos', ev.type, content, {
-          eventId: ev.id,
-          eventTitle: ev.title,
-          date: ev.date,
-          time: ev.time || '',
-          priority: ev.priority
-        }).catch(err => console.warn('Synapse index error:', err));
-      }
-    }
-    
     setCurrentView('chronos');
     setTimeout(() => refreshSynapseStats(), 1000);
   }, [calendarEvents, settings, refreshSynapseStats]);
