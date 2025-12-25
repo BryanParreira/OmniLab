@@ -11,7 +11,6 @@ jobs:
 
     strategy:
       matrix:
-        # This triggers two separate builds: one for Windows, one for Mac
         os: [windows-latest, macos-latest]
 
     steps:
@@ -23,8 +22,6 @@ jobs:
         with:
           node-version: 20
 
-      # CRITICAL FIX: We remove the lockfile so the runner generates a fresh one
-      # for its specific operating system (Windows gets Windows files, Mac gets Mac files)
       - name: Remove Lockfile
         shell: bash
         run: rm package-lock.json
@@ -35,6 +32,10 @@ jobs:
       - name: Build & Release
         env:
           GH_TOKEN: ${{ secrets.GH_TOKEN }}
+          # Apple notarization credentials (macOS only)
+          APPLE_ID: ${{ secrets.APPLE_ID }}
+          APPLE_APP_SPECIFIC_PASSWORD: ${{ secrets.APPLE_ID_PASSWORD }}
+          APPLE_TEAM_ID: ${{ secrets.APPLE_TEAM_ID }}
         run: |
           npm run build
           npx electron-builder --publish always
