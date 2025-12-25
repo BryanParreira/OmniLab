@@ -1,7 +1,7 @@
 {
   "name": "brainless",
   "private": true,
-  "version": "1.0.42",
+  "version": "1.0.43",
   "type": "module",
   "main": "electron/main.cjs",
   "description": "Advanced AI Research & Engineering Environment",
@@ -97,6 +97,9 @@
     },
     "win": {
       "icon": "build/icon.ico",
+      "publisherName": "Brainless Team",
+      "signingHashAlgorithms": ["sha256"],
+      "sign": null,
       "target": [
         {
           "target": "nsis",
@@ -111,7 +114,7 @@
           ]
         }
       ]
-    },
+    },  
     "linux": {
       "icon": "build/icon.png",
       "category": "Development",
