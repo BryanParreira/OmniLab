@@ -1,7 +1,7 @@
 {
   "name": "brainless",
   "private": true,
-  "version": "1.0.46",
+  "version": "1.0.47",
   "type": "module",
   "main": "electron/main.cjs",
   "description": "Advanced AI Research & Engineering Environment",
@@ -88,13 +88,10 @@
       "target": [
         {
           "target": "dmg",
-          "arch": [
-            "arm64",
-            "x64"
-          ]
+          "arch": ["arm64", "x64"]
         }
       ]
-    },
+    },  
     "win": {
       "icon": "build/icon.ico",
       "publisherName": "Brainless Team",
