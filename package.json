@@ -1,7 +1,7 @@
 {
   "name": "brainless",
   "private": true,
-  "version": "1.0.48",
+  "version": "1.0.49",
   "type": "module",
   "main": "electron/main.cjs",
   "description": "Advanced AI Research & Engineering Environment",
