@@ -1,11 +1,12 @@
-import React, { useState, useEffect, useCallback } from 'react';
+import React, { useState, useEffect, useCallback, useMemo, useRef } from 'react';
 import { 
   X, Maximize2, Minimize2, Download, Code, Eye, RefreshCw, FlaskConical, 
   ChevronLeft, ChevronRight, BrainCircuit, Check, Copy, Activity, 
   RotateCcw, Repeat, Plus, History, GitBranch, Search,
   Sparkles, BookOpen, Edit3, BarChart3, Target, Zap, 
   Share2, Grid, List, Volume2, VolumeX,
-  ArrowLeft, ArrowRight, AlertCircle, CheckCircle2, ThumbsUp
+  ArrowLeft, ArrowRight, AlertCircle, CheckCircle2, ThumbsUp,
+  Save, FileText
 } from 'lucide-react';
 import { motion, AnimatePresence } from 'framer-motion';
 import Editor from '@monaco-editor/react';
@@ -35,6 +36,7 @@ const KeyboardShortcuts = ({ isOpen, onClose, theme }) => {
       <motion.div
         initial={{ scale: 0.95, y: 20 }}
         animate={{ scale: 1, y: 0 }}
+        exit={{ scale: 0.95, y: 20 }}
         onClick={(e) => e.stopPropagation()}
         className="bg-[#0A0A0A] border border-white/20 rounded-2xl p-6 max-w-md w-full shadow-2xl"
       >
@@ -71,7 +73,7 @@ const VersionHistory = ({ versions, currentVersion, onRestore, onClose, theme })
           <History size={14} className={theme.accentText} />
           <span className="text-xs font-bold text-white">Version History</span>
         </div>
-        <button onClick={onClose} className="p-1.5 rounded-lg hover:bg-white/5 text-gray-500 hover:text-white">
+        <button onClick={onClose} className="p-1.5 rounded-lg hover:bg-white/5 text-gray-500 hover:text-white transition-all">
           <X size={14} />
         </button>
       </div>
@@ -124,7 +126,7 @@ const FlashcardDeck = ({ data, theme, onUpdate }) => {
 
   const currentCard = data[index];
 
-  const handleGrade = (difficulty) => {
+  const handleGrade = useCallback((difficulty) => {
     const isCorrect = difficulty !== 'again';
     
     setSessionStats(prev => ({
@@ -149,37 +151,37 @@ const FlashcardDeck = ({ data, theme, onUpdate }) => {
     setTimeout(() => {
       setIndex((i) => (i + 1) % data.length);
     }, 200);
-  };
+  }, [index, streak, data.length]);
 
-  const handleShuffle = () => {
+  const handleShuffle = useCallback(() => {
     setShuffled(!shuffled);
     setIndex(0);
-  };
+  }, [shuffled]);
 
-  const handleEdit = () => {
+  const handleEdit = useCallback(() => {
     setEditedCard({ ...currentCard });
     setIsEditing(true);
-  };
+  }, [currentCard]);
 
-  const handleSaveEdit = () => {
+  const handleSaveEdit = useCallback(() => {
     if (editedCard && onUpdate) {
       onUpdate(index, editedCard);
     }
     setIsEditing(false);
-  };
+  }, [editedCard, onUpdate, index]);
 
-  const speakText = (text) => {
+  const speakText = useCallback((text) => {
     if (!audioEnabled || !window.speechSynthesis) return;
     window.speechSynthesis.cancel();
     const utterance = new SpeechSynthesisUtterance(text);
     window.speechSynthesis.speak(utterance);
-  };
+  }, [audioEnabled]);
 
   useEffect(() => {
     if (audioEnabled && isFlipped) {
       speakText(currentCard.back);
     }
-  }, [isFlipped, audioEnabled]);
+  }, [isFlipped, audioEnabled, currentCard.back, speakText]);
 
   useEffect(() => {
     const handleKeyDown = (e) => {
@@ -208,7 +210,7 @@ const FlashcardDeck = ({ data, theme, onUpdate }) => {
     };
     window.addEventListener('keydown', handleKeyDown);
     return () => window.removeEventListener('keydown', handleKeyDown);
-  }, [isFlipped, index, isEditing]);
+  }, [isFlipped, index, isEditing, data.length, handleGrade]);
 
   const progress = ((index + 1) / data.length) * 100;
   const accuracy = sessionStats.reviewed > 0 ? Math.round((sessionStats.correct / sessionStats.reviewed) * 100) : 0;
@@ -290,7 +292,7 @@ const FlashcardDeck = ({ data, theme, onUpdate }) => {
             <textarea
               value={editedCard?.front || ''}
               onChange={(e) => setEditedCard({ ...editedCard, front: e.target.value })}
-              className="w-full bg-black/50 border border-white/10 rounded-lg p-3 text-white text-sm resize-none focus:outline-none focus:border-white/30"
+              className="w-full bg-black/50 border border-white/10 rounded-lg p-3 text-white text-sm resize-none focus:outline-none focus:border-white/30 transition-all"
               rows={3}
             />
           </div>
@@ -299,7 +301,7 @@ const FlashcardDeck = ({ data, theme, onUpdate }) => {
             <textarea
               value={editedCard?.back || ''}
               onChange={(e) => setEditedCard({ ...editedCard, back: e.target.value })}
-              className="w-full bg-black/50 border border-white/10 rounded-lg p-3 text-white text-sm resize-none focus:outline-none focus:border-white/30"
+              className="w-full bg-black/50 border border-white/10 rounded-lg p-3 text-white text-sm resize-none focus:outline-none focus:border-white/30 transition-all"
               rows={4}
             />
           </div>
@@ -504,17 +506,17 @@ const FlashcardDeck = ({ data, theme, onUpdate }) => {
 // --- ENHANCED SYNTHESIS TABLE ---
 const SynthesisTable = ({ data, theme }) => {
   const [copiedId, setCopiedId] = useState(null);
-  const [viewMode, setViewMode] = useState('table'); // table, cards, timeline
+  const [viewMode, setViewMode] = useState('table');
   const [searchQuery, setSearchQuery] = useState('');
   const [sortBy, setSortBy] = useState('default');
 
-  const handleCopy = (text, idx) => {
+  const handleCopy = useCallback((text, idx) => {
     navigator.clipboard.writeText(text);
     setCopiedId(idx);
     setTimeout(() => setCopiedId(null), 2000);
-  };
+  }, []);
 
-  const handleExport = () => {
+  const handleExport = useCallback(() => {
     const markdown = data.sections.map(section => 
       `## ${section.title}\n\n**${data.sourceA}:** ${section.contentA}\n\n**${data.sourceB}:** ${section.contentB}\n\n**Synthesis:** ${section.synthesis}\n\n---\n`
     ).join('\n');
@@ -525,12 +527,15 @@ const SynthesisTable = ({ data, theme }) => {
     a.href = url;
     a.download = 'synthesis.md';
     a.click();
-  };
+    window.URL.revokeObjectURL(url);
+  }, [data]);
 
-  const filteredSections = data.sections.filter(section =>
-    section.title.toLowerCase().includes(searchQuery.toLowerCase()) ||
-    section.synthesis.toLowerCase().includes(searchQuery.toLowerCase())
-  );
+  const filteredSections = useMemo(() => {
+    return data.sections.filter(section =>
+      section.title.toLowerCase().includes(searchQuery.toLowerCase()) ||
+      section.synthesis.toLowerCase().includes(searchQuery.toLowerCase())
+    );
+  }, [data.sections, searchQuery]);
 
   return (
     <div className="h-full overflow-y-auto p-8 custom-scrollbar bg-[#050505]">
@@ -694,7 +699,7 @@ const SynthesisTable = ({ data, theme }) => {
 
 // --- MAIN LAB BENCH WITH TABS ---
 export const LabBench = ({ artifacts: initialArtifacts = [], onClose, theme }) => {
-  // Use local state to manage tabs, but initialize from props
+  // State management
   const [artifacts, setArtifacts] = useState(initialArtifacts.length > 0 ? initialArtifacts : []);
   const [activeTab, setActiveTab] = useState(0);
   const [view, setView] = useState('preview');
@@ -707,28 +712,33 @@ export const LabBench = ({ artifacts: initialArtifacts = [], onClose, theme }) =
   const [currentVersion, setCurrentVersion] = useState(0);
   const [searchInCode, setSearchInCode] = useState('');
   const [showSearch, setShowSearch] = useState(false);
+  const [autoSaveEnabled, setAutoSaveEnabled] = useState(true);
+  const [saveIndicator, setSaveIndicator] = useState(false);
 
-  // CRITICAL: Sync with prop changes to APPEND new tabs
+  const autoSaveTimerRef = useRef(null);
+  const editorRef = useRef(null);
+
+  // IMPROVED: Better sync with prop changes
   useEffect(() => {
     if (initialArtifacts.length > 0) {
       const incoming = initialArtifacts[0];
       if (!incoming) return;
 
       setArtifacts(prev => {
-        // 1. Is it already in our list?
+        // Check if already exists
         const existingIndex = prev.findIndex(item => 
           item.content === incoming.content && item.language === incoming.language
         );
 
         if (existingIndex !== -1) {
-          // If already exists, switch to that tab
+          // Already exists, just switch to it
           setActiveTab(existingIndex);
           return prev;
         }
 
-        // 2. It's new, append it
+        // It's new, append it
         const newList = [...prev, incoming];
-        setActiveTab(newList.length - 1); // Switch to the new end
+        setActiveTab(newList.length - 1);
         return newList;
       });
     }
@@ -736,11 +746,11 @@ export const LabBench = ({ artifacts: initialArtifacts = [], onClose, theme }) =
 
   const artifact = artifacts[activeTab] || artifacts[0];
   
-  // Supported languages list for the selector
-  const SUPPORTED_LANGUAGES = [
+  // Supported languages
+  const SUPPORTED_LANGUAGES = useMemo(() => [
     'javascript', 'typescript', 'html', 'css', 'json', 'python', 'java', 
     'c', 'cpp', 'csharp', 'go', 'rust', 'php', 'sql', 'markdown', 'xml', 'yaml', 'shell'
-  ];
+  ], []);
 
   // Determine artifact type
   const isWeb = artifact?.language && ['html', 'svg'].includes(artifact.language);
@@ -748,7 +758,28 @@ export const LabBench = ({ artifacts: initialArtifacts = [], onClose, theme }) =
   const isSynthesis = artifact?.type === 'synthesis';
   const isCode = !isFlashcards && !isSynthesis;
 
-  // Save version on content change (initial load)
+  // IMPROVED: Auto-save with debounce
+  useEffect(() => {
+    if (!artifact || !autoSaveEnabled) return;
+
+    if (autoSaveTimerRef.current) {
+      clearTimeout(autoSaveTimerRef.current);
+    }
+
+    autoSaveTimerRef.current = setTimeout(() => {
+      saveVersion('Auto-save');
+      setSaveIndicator(true);
+      setTimeout(() => setSaveIndicator(false), 1000);
+    }, 3000);
+
+    return () => {
+      if (autoSaveTimerRef.current) {
+        clearTimeout(autoSaveTimerRef.current);
+      }
+    };
+  }, [artifact?.content, autoSaveEnabled]);
+
+  // Initialize version history
   useEffect(() => {
     if (artifact && versions.length === 0) {
       setVersions([{
@@ -757,16 +788,17 @@ export const LabBench = ({ artifacts: initialArtifacts = [], onClose, theme }) =
         description: 'Initial version'
       }]);
     }
-  }, [artifact]);
+  }, [artifact, versions.length]);
 
   const saveVersion = useCallback((description = 'Manual save') => {
+    if (!artifact) return;
     setVersions(prev => [...prev, {
       content: artifact.content,
       timestamp: new Date().toLocaleTimeString(),
       description
     }]);
-    setCurrentVersion(versions.length);
-  }, [artifact, versions.length]);
+    setCurrentVersion(prev => prev + 1);
+  }, [artifact]);
 
   const restoreVersion = useCallback((index) => {
     const updatedArtifacts = [...artifacts];
@@ -779,7 +811,7 @@ export const LabBench = ({ artifacts: initialArtifacts = [], onClose, theme }) =
     setShowHistory(false);
   }, [artifacts, activeTab, artifact, versions]);
 
-  const handleDownload = () => {
+  const handleDownload = useCallback(() => {
     const content = isFlashcards || isSynthesis ? JSON.stringify(artifact.content, null, 2) : artifact.content;
     const blob = new Blob([content], { type: 'text/plain' });
     const url = window.URL.createObjectURL(blob);
@@ -787,33 +819,33 @@ export const LabBench = ({ artifacts: initialArtifacts = [], onClose, theme }) =
     a.href = url;
     a.download = `artifact-${Date.now()}.${isFlashcards || isSynthesis ? 'json' : artifact.language || 'txt'}`;
     a.click();
-  };
+    window.URL.revokeObjectURL(url);
+  }, [artifact, isFlashcards, isSynthesis]);
 
-  const handleCopyCode = () => {
+  const handleCopyCode = useCallback(() => {
     navigator.clipboard.writeText(artifact.content);
     setCodeCopied(true);
     setTimeout(() => setCodeCopied(false), 2000);
-  };
+  }, [artifact]);
 
-  const handleShare = () => {
-    // Generate shareable link (placeholder)
+  const handleShare = useCallback(() => {
     const shareUrl = `${window.location.origin}/share/${btoa(artifact.content).slice(0, 20)}`;
     navigator.clipboard.writeText(shareUrl);
     alert('Share link copied to clipboard!');
-  };
+  }, [artifact]);
 
-  const addNewTab = () => {
-    setArtifacts([...artifacts, {
+  const addNewTab = useCallback(() => {
+    setArtifacts(prev => [...prev, {
       content: '// Select language above\n',
-      language: 'javascript', // Default to JS, but user can change
+      language: 'javascript',
       type: 'code',
       title: 'New Tab'
     }]);
     setActiveTab(artifacts.length);
     setView('code');
-  };
+  }, [artifacts.length]);
 
-  const closeTab = (index) => {
+  const closeTab = useCallback((index) => {
     if (artifacts.length === 1) {
       onClose();
       return;
@@ -823,55 +855,60 @@ export const LabBench = ({ artifacts: initialArtifacts = [], onClose, theme }) =
     if (activeTab >= index && activeTab > 0) {
       setActiveTab(activeTab - 1);
     }
-  };
+  }, [artifacts, activeTab, onClose]);
 
-  const handleLanguageChange = (newLang) => {
+  const handleLanguageChange = useCallback((newLang) => {
     const updatedArtifacts = [...artifacts];
     updatedArtifacts[activeTab] = { ...artifact, language: newLang };
     setArtifacts(updatedArtifacts);
-  };
+  }, [artifacts, activeTab, artifact]);
 
-  // --- INTEGRATION LOGIC: Combine Tabs for Preview ---
-  const getCombinedPreview = () => {
-    if (artifact.language !== 'html') return artifact.content;
+  // IMPROVED: Better combined preview with error handling
+  const getCombinedPreview = useCallback(() => {
+    if (!artifact || artifact.language !== 'html') return artifact?.content || '';
 
-    let htmlContent = artifact.content;
+    try {
+      let htmlContent = artifact.content;
 
-    // 1. Inject CSS from other tabs
-    const cssTabs = artifacts.filter(a => a.language === 'css');
-    if (cssTabs.length > 0) {
-      const combinedCss = cssTabs.map(a => a.content).join('\n');
-      const styleTag = `<style>\n${combinedCss}\n</style>`;
-      
-      if (htmlContent.includes('</head>')) {
-        htmlContent = htmlContent.replace('</head>', `${styleTag}\n</head>`);
-      } else {
-        htmlContent = `${styleTag}\n${htmlContent}`;
+      // Inject CSS
+      const cssTabs = artifacts.filter(a => a.language === 'css');
+      if (cssTabs.length > 0) {
+        const combinedCss = cssTabs.map(a => a.content).join('\n');
+        const styleTag = `<style>\n${combinedCss}\n</style>`;
+        
+        if (htmlContent.includes('</head>')) {
+          htmlContent = htmlContent.replace('</head>', `${styleTag}\n</head>`);
+        } else {
+          htmlContent = `${styleTag}\n${htmlContent}`;
+        }
       }
-    }
 
-    // 2. Inject JS from other tabs
-    const jsTabs = artifacts.filter(a => a !== artifact && ['javascript', 'typescript'].includes(a.language));
-    if (jsTabs.length > 0) {
-      const combinedJs = jsTabs.map(a => a.content).join('\n');
-      const scriptTag = `<script>\n${combinedJs}\n</script>`;
-      
-      if (htmlContent.includes('</body>')) {
-        htmlContent = htmlContent.replace('</body>', `${scriptTag}\n</body>`);
-      } else {
-        htmlContent = `${htmlContent}\n${scriptTag}`;
+      // Inject JS
+      const jsTabs = artifacts.filter(a => a !== artifact && ['javascript', 'typescript'].includes(a.language));
+      if (jsTabs.length > 0) {
+        const combinedJs = jsTabs.map(a => a.content).join('\n');
+        const scriptTag = `<script>\n${combinedJs}\n</script>`;
+        
+        if (htmlContent.includes('</body>')) {
+          htmlContent = htmlContent.replace('</body>', `${scriptTag}\n</body>`);
+        } else {
+          htmlContent = `${htmlContent}\n${scriptTag}`;
+        }
       }
+
+      return htmlContent;
+    } catch (error) {
+      console.error('Error combining preview:', error);
+      return artifact.content;
     }
+  }, [artifact, artifacts]);
 
-    return htmlContent;
-  };
-
-  // Keyboard shortcuts listener
+  // IMPROVED: Better keyboard shortcuts
   useEffect(() => {
     const handleKeyDown = (e) => {
       if ((e.metaKey || e.ctrlKey) && e.key === '/') {
         e.preventDefault();
-        setShowShortcuts(!showShortcuts);
+        setShowShortcuts(prev => !prev);
       }
       if ((e.metaKey || e.ctrlKey) && e.key === 's') {
         e.preventDefault();
@@ -879,17 +916,22 @@ export const LabBench = ({ artifacts: initialArtifacts = [], onClose, theme }) =
       }
       if ((e.metaKey || e.ctrlKey) && e.key === 'f' && isCode) {
         e.preventDefault();
-        setShowSearch(!showSearch);
+        setShowSearch(prev => !prev);
       }
       if ((e.metaKey || e.ctrlKey) && e.key === 'h') {
         e.preventDefault();
-        setShowHistory(!showHistory);
+        setShowHistory(prev => !prev);
+      }
+      if (e.key === 'Escape') {
+        setShowSearch(false);
+        setShowHistory(false);
+        setShowShortcuts(false);
       }
     };
     
     window.addEventListener('keydown', handleKeyDown);
     return () => window.removeEventListener('keydown', handleKeyDown);
-  }, [showShortcuts, showSearch, showHistory, isCode]);
+  }, [showShortcuts, showSearch, showHistory, isCode, handleDownload]);
 
   if (!artifact) return null;
 
@@ -899,6 +941,7 @@ export const LabBench = ({ artifacts: initialArtifacts = [], onClose, theme }) =
         initial={{ x: 300, opacity: 0 }}
         animate={{ x: 0, opacity: 1 }}
         exit={{ x: 300, opacity: 0 }}
+        transition={{ type: "spring", damping: 25, stiffness: 300 }}
         className={`border-l border-white/5 bg-[#050505] flex flex-col shadow-2xl relative transition-all duration-300 ${
           isExpanded ? 'fixed inset-0 z-50' : 'w-[50%] h-full'
         }`}
@@ -907,32 +950,38 @@ export const LabBench = ({ artifacts: initialArtifacts = [], onClose, theme }) =
         <div className="border-b border-white/5 bg-[#0A0A0A]">
           {/* Tabs Row */}
           <div className="flex items-center gap-1 px-2 pt-2 overflow-x-auto custom-scrollbar">
-            {artifacts.map((art, i) => (
-              <div
-                key={i}
-                onClick={() => setActiveTab(i)}
-                className={`flex items-center gap-2 px-3 py-2 rounded-t-lg cursor-pointer transition-all min-w-[120px] max-w-[200px] ${
-                  activeTab === i
-                    ? `${theme.softBg} ${theme.accentText} border-t border-x ${theme.softBorder}`
-                    : 'bg-black/20 text-gray-500 hover:text-gray-300'
-                }`}
-              >
-                <FlaskConical size={12} />
-                <span className="text-xs font-bold truncate flex-1">
-                  {art.type === 'flashcards' ? 'Flashcards' : art.type === 'synthesis' ? 'Synthesis' : art.language || 'Code'}
-                </span>
-                <button
-                  onClick={(e) => { e.stopPropagation(); closeTab(i); }}
-                  className="p-0.5 rounded hover:bg-white/10 text-gray-500 hover:text-white"
+            <AnimatePresence mode="popLayout">
+              {artifacts.map((art, i) => (
+                <motion.div
+                  key={i}
+                  initial={{ opacity: 0, scale: 0.8 }}
+                  animate={{ opacity: 1, scale: 1 }}
+                  exit={{ opacity: 0, scale: 0.8 }}
+                  transition={{ duration: 0.2 }}
+                  onClick={() => setActiveTab(i)}
+                  className={`flex items-center gap-2 px-3 py-2 rounded-t-lg cursor-pointer transition-all min-w-[120px] max-w-[200px] ${
+                    activeTab === i
+                      ? `${theme.softBg} ${theme.accentText} border-t border-x ${theme.softBorder}`
+                      : 'bg-black/20 text-gray-500 hover:text-gray-300'
+                  }`}
                 >
-                  <X size={10} />
-                </button>
-              </div>
-            ))}
+                  <FlaskConical size={12} />
+                  <span className="text-xs font-bold truncate flex-1">
+                    {art.type === 'flashcards' ? 'Flashcards' : art.type === 'synthesis' ? 'Synthesis' : art.language || 'Code'}
+                  </span>
+                  <button
+                    onClick={(e) => { e.stopPropagation(); closeTab(i); }}
+                    className="p-0.5 rounded hover:bg-white/10 text-gray-500 hover:text-white transition-all"
+                  >
+                    <X size={10} />
+                  </button>
+                </motion.div>
+              ))}
+            </AnimatePresence>
             <button
               onClick={addNewTab}
               className="p-2 rounded-lg hover:bg-white/5 text-gray-500 hover:text-white transition-all"
-              title="New tab"
+              title="New tab (⌘N)"
             >
               <Plus size={14} />
             </button>
@@ -948,12 +997,12 @@ export const LabBench = ({ artifacts: initialArtifacts = [], onClose, theme }) =
                 Lab Bench <span className="text-gray-600">/</span>
               </span>
               
-              {/* LANGUAGE SELECTOR */}
+              {/* Language Selector */}
               {isCode && (
                 <select
                   value={artifact.language || 'javascript'}
                   onChange={(e) => handleLanguageChange(e.target.value)}
-                  className="bg-black/30 border border-white/10 rounded px-2 py-1 text-xs text-white focus:outline-none focus:border-white/30 cursor-pointer"
+                  className="bg-black/30 border border-white/10 rounded px-2 py-1 text-xs text-white focus:outline-none focus:border-white/30 cursor-pointer transition-all"
                 >
                   {SUPPORTED_LANGUAGES.map(lang => (
                     <option key={lang} value={lang}>{lang}</option>
@@ -965,15 +1014,38 @@ export const LabBench = ({ artifacts: initialArtifacts = [], onClose, theme }) =
                   {isFlashcards ? 'Flashpoint' : 'Synthesizer'}
                 </span>
               )}
+
+              {/* Save Indicator */}
+              <AnimatePresence>
+                {saveIndicator && (
+                  <motion.div
+                    initial={{ opacity: 0, scale: 0.8 }}
+                    animate={{ opacity: 1, scale: 1 }}
+                    exit={{ opacity: 0, scale: 0.8 }}
+                    className="flex items-center gap-1 text-xs text-green-400"
+                  >
+                    <CheckCircle2 size={12} />
+                    Saved
+                  </motion.div>
+                )}
+              </AnimatePresence>
             </div>
             
             <div className="flex items-center gap-1">
               {isWeb && (
                 <div className="flex bg-black/50 rounded-lg p-0.5 border border-white/5 mr-2">
-                  <button onClick={() => setView('code')} className={`p-1.5 rounded-md ${view === 'code' ? 'bg-white/10 text-white' : 'text-gray-500'}`} title="Code">
+                  <button 
+                    onClick={() => setView('code')} 
+                    className={`p-1.5 rounded-md transition-all ${view === 'code' ? 'bg-white/10 text-white' : 'text-gray-500 hover:text-white'}`} 
+                    title="Code"
+                  >
                     <Code size={12}/>
                   </button>
-                  <button onClick={() => setView('preview')} className={`p-1.5 rounded-md ${view === 'preview' ? `${theme.softBg} ${theme.accentText}` : 'text-gray-500'}`} title="Preview">
+                  <button 
+                    onClick={() => setView('preview')} 
+                    className={`p-1.5 rounded-md transition-all ${view === 'preview' ? `${theme.softBg} ${theme.accentText}` : 'text-gray-500 hover:text-white'}`} 
+                    title="Preview"
+                  >
                     <Eye size={12}/>
                   </button>
                 </div>
@@ -999,15 +1071,15 @@ export const LabBench = ({ artifacts: initialArtifacts = [], onClose, theme }) =
               
               <button 
                 onClick={() => setKey(k=>k+1)} 
-                className="p-2 hover:bg-white/5 rounded-lg text-gray-500 hover:text-white" 
-                title="Refresh"
+                className="p-2 hover:bg-white/5 rounded-lg text-gray-500 hover:text-white transition-all" 
+                title="Refresh preview"
               >
                 <RefreshCw size={14}/>
               </button>
               
               <button 
                 onClick={handleShare} 
-                className="p-2 hover:bg-white/5 rounded-lg text-gray-500 hover:text-white"
+                className="p-2 hover:bg-white/5 rounded-lg text-gray-500 hover:text-white transition-all"
                 title="Share"
               >
                 <Share2 size={14}/>
@@ -1015,7 +1087,7 @@ export const LabBench = ({ artifacts: initialArtifacts = [], onClose, theme }) =
               
               <button 
                 onClick={handleDownload} 
-                className="p-2 hover:bg-white/5 rounded-lg text-gray-500 hover:text-white"
+                className="p-2 hover:bg-white/5 rounded-lg text-gray-500 hover:text-white transition-all"
                 title="Download (⌘S)"
               >
                 <Download size={14}/>
@@ -1023,7 +1095,7 @@ export const LabBench = ({ artifacts: initialArtifacts = [], onClose, theme }) =
               
               <button 
                 onClick={() => setIsExpanded(!isExpanded)} 
-                className="p-2 hover:bg-white/5 rounded-lg text-gray-500 hover:text-white"
+                className="p-2 hover:bg-white/5 rounded-lg text-gray-500 hover:text-white transition-all"
                 title="Toggle fullscreen"
               >
                 {isExpanded ? <Minimize2 size={14} /> : <Maximize2 size={14} />}
@@ -1033,7 +1105,7 @@ export const LabBench = ({ artifacts: initialArtifacts = [], onClose, theme }) =
               
               <button 
                 onClick={onClose} 
-                className="p-2 hover:bg-red-500/10 rounded-lg text-gray-500 hover:text-red-400"
+                className="p-2 hover:bg-red-500/10 rounded-lg text-gray-500 hover:text-red-400 transition-all"
                 title="Close"
               >
                 <X size={14}/>
@@ -1048,6 +1120,7 @@ export const LabBench = ({ artifacts: initialArtifacts = [], onClose, theme }) =
                 initial={{ height: 0, opacity: 0 }}
                 animate={{ height: 'auto', opacity: 1 }}
                 exit={{ height: 0, opacity: 0 }}
+                transition={{ duration: 0.2 }}
                 className="px-4 pb-3 border-t border-white/5"
               >
                 <div className="flex gap-2 pt-3">
@@ -1058,7 +1131,7 @@ export const LabBench = ({ artifacts: initialArtifacts = [], onClose, theme }) =
                       value={searchInCode}
                       onChange={(e) => setSearchInCode(e.target.value)}
                       placeholder="Search in code..."
-                      className="w-full bg-black/50 border border-white/10 rounded-lg pl-10 pr-4 py-2 text-sm text-white focus:outline-none focus:border-white/30"
+                      className="w-full bg-black/50 border border-white/10 rounded-lg pl-10 pr-4 py-2 text-sm text-white focus:outline-none focus:border-white/30 transition-all"
                       autoFocus
                     />
                   </div>
@@ -1091,16 +1164,18 @@ export const LabBench = ({ artifacts: initialArtifacts = [], onClose, theme }) =
           ) : isSynthesis ? (
             <SynthesisTable data={artifact.content} theme={theme} />
           ) : view === 'preview' && isWeb ? (
-            <iframe 
-              key={key} 
-              srcDoc={getCombinedPreview()} // Use the new function here
-              className="w-full h-full border-none bg-white" 
-              sandbox="allow-scripts allow-modals"
-              title="Preview"
-            />
+            <div className="w-full h-full bg-white relative">
+              <iframe 
+                key={key} 
+                srcDoc={getCombinedPreview()}
+                className="w-full h-full border-none" 
+                sandbox="allow-scripts allow-modals allow-forms"
+                title="Preview"
+              />
+            </div>
           ) : (
             <div className="h-full overflow-hidden relative group">
-              {/* Monaco Editor for better code editing */}
+              {/* Monaco Editor */}
               <Editor
                 height="100%"
                 language={artifact.language || 'javascript'}
@@ -1117,12 +1192,20 @@ export const LabBench = ({ artifacts: initialArtifacts = [], onClose, theme }) =
                   find: {
                     seedSearchStringFromSelection: 'selection',
                     autoFindInSelection: 'multiline'
-                  }
+                  },
+                  quickSuggestions: true,
+                  suggestOnTriggerCharacters: true,
+                  acceptSuggestionOnEnter: 'on',
+                  formatOnPaste: true,
+                  formatOnType: true
                 }}
                 onChange={(value) => {
                   const updatedArtifacts = [...artifacts];
                   updatedArtifacts[activeTab] = { ...artifact, content: value };
                   setArtifacts(updatedArtifacts);
+                }}
+                onMount={(editor) => {
+                  editorRef.current = editor;
                 }}
               />
 
@@ -1151,7 +1234,7 @@ export const LabBench = ({ artifacts: initialArtifacts = [], onClose, theme }) =
           )}
         </AnimatePresence>
 
-        {/* Styles for 3D Flip Effects */}
+        {/* Styles */}
         <style jsx>{`
           .perspective-1000 { perspective: 1000px; }
           .transform-style-3d { transform-style: preserve-3d; }

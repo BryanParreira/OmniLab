@@ -20,15 +20,7 @@ import {
   AlignLeft,
   ArrowLeft,
   GripHorizontal,
-  Mic,
-  MicOff,
-  Volume2,
-  Upload,
-  Filter,
-  Search,
-  Zap,
-  TrendingUp,
-  BarChart3
+  Upload
 } from 'lucide-react';
 import { motion, AnimatePresence } from 'framer-motion';
 
@@ -265,64 +257,6 @@ const parseICS = (icsContent) => {
   return events;
 };
 
-const useVoiceRecognition = (onResult) => {
-  const [isListening, setIsListening] = useState(false);
-  const [recognition, setRecognition] = useState(null);
-
-  useEffect(() => {
-    if (typeof window !== 'undefined' && ('webkitSpeechRecognition' in window || 'SpeechRecognition' in window)) {
-      const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition;
-      const recognitionInstance = new SpeechRecognition();
-      recognitionInstance.continuous = false;
-      recognitionInstance.interimResults = false;
-      recognitionInstance.lang = 'en-US';
-
-      recognitionInstance.onresult = (event) => {
-        const transcript = event.results[0][0].transcript;
-        if (onResult) onResult(transcript);
-        setIsListening(false);
-      };
-
-      recognitionInstance.onerror = () => {
-        setIsListening(false);
-      };
-
-      recognitionInstance.onend = () => {
-        setIsListening(false);
-      };
-
-      setRecognition(recognitionInstance);
-    }
-  }, [onResult]);
-
-  const startListening = useCallback(() => {
-    if (recognition) {
-      setIsListening(true);
-      recognition.start();
-    }
-  }, [recognition]);
-
-  const stopListening = useCallback(() => {
-    if (recognition) {
-      recognition.stop();
-      setIsListening(false);
-    }
-  }, [recognition]);
-
-  return { isListening, startListening, stopListening, isSupported: !!recognition };
-};
-
-const speakText = (text) => {
-  if ('speechSynthesis' in window) {
-    window.speechSynthesis.cancel();
-    const utterance = new SpeechSynthesisUtterance(text);
-    utterance.rate = 1.0;
-    utterance.pitch = 1.0;
-    utterance.volume = 1.0;
-    window.speechSynthesis.speak(utterance);
-  }
-};
-
 // --- DRAGGABLE EVENT COMPONENT ---
 const DraggableEvent = ({ event, onClick, theme }) => {
     const [isHovered, setIsHovered] = useState(false);
@@ -397,7 +331,7 @@ const CalendarDay = React.memo(({ day, dateStr, dayEvents, isToday, theme, onDay
           setIsDragOver(false);
       }}
       onDrop={handleDrop}
-      className={`relative border p-3 flex flex-col transition-all cursor-pointer min-h-[110px] group rounded-xl ${
+      className={`relative border p-3 flex flex-col transition-all cursor-pointer group rounded-xl ${
         isDragOver ? 'border-blue-500/60 bg-blue-500/10 ring-2 ring-blue-500/30 shadow-lg shadow-blue-500/20' : 'border-white/[0.08]'
       } ${isToday 
         ? 'bg-gradient-to-br from-blue-500/[0.08] to-purple-500/[0.08] border-blue-500/30 shadow-inner' 
@@ -432,7 +366,7 @@ const CalendarDay = React.memo(({ day, dateStr, dayEvents, isToday, theme, onDay
               exit={{ opacity: 0 }}
               className="flex items-center justify-center h-full text-gray-600 text-[10px] font-medium"
             >
-              <Plus size={12} className="mr-1" />
+              <Plus size={11} className="mr-1" />
               Add event
             </motion.div>
           )}
@@ -631,7 +565,7 @@ const WeekView = React.memo(({ currentDate, eventsByDate, theme, onEventClick, o
 });
 
 // --- EVENT MODAL COMPONENT ---
-const EventModal = React.memo(({ isOpen, isPlanning, isEditing, onClose, onAdd, onUpdate, onDelete, onGenerate, settings, theme, isLoading, voiceHandler, ...props }) => {
+const EventModal = React.memo(({ isOpen, isPlanning, isEditing, onClose, onAdd, onUpdate, onDelete, onGenerate, settings, theme, isLoading, ...props }) => {
     const [isEditingState, setIsEditingState] = useState(false);
     const dateInputRef = useRef(null);
     const timeInputRef = useRef(null);
@@ -670,13 +604,6 @@ const EventModal = React.memo(({ isOpen, isPlanning, isEditing, onClose, onAdd, 
                 <>
                     <div className={`p-8 relative overflow-hidden bg-gradient-to-br ${theme.softBg} border-b border-white/10`}>
                         <div className="absolute top-4 right-4 flex gap-2">
-                             <button 
-                               onClick={() => speakText(`${props.newEventTitle}. ${formatFriendlyDate(props.newEventDate)}${props.newEventTime ? ` at ${props.newEventTime}` : ''}. ${props.newEventNotes || 'No additional notes'}`)} 
-                               className="p-2 bg-black/30 hover:bg-black/50 text-white rounded-lg backdrop-blur-sm transition-all hover:scale-105" 
-                               title="Read aloud"
-                             >
-                               <Volume2 size={16} />
-                             </button>
                              <button 
                                onClick={() => setIsEditingState(true)} 
                                className="p-2 bg-black/30 hover:bg-black/50 text-white rounded-lg backdrop-blur-sm transition-all hover:scale-105" 
@@ -867,19 +794,7 @@ const EventModal = React.memo(({ isOpen, isPlanning, isEditing, onClose, onAdd, 
                             </div>
                         </div>
                         <div>
-                            <label className="text-xs font-bold text-gray-400 mb-2 flex items-center justify-between">
-                              <span>Title</span>
-                              {voiceHandler?.isSupported && (
-                                <button
-                                  type="button"
-                                  onClick={voiceHandler.isListening ? voiceHandler.stopListening : voiceHandler.startListening}
-                                  className={`p-1.5 rounded-lg transition-all ${voiceHandler.isListening ? 'bg-red-500/20 text-red-400 animate-pulse' : 'bg-white/5 text-gray-400 hover:text-white hover:bg-white/10'}`}
-                                  title={voiceHandler.isListening ? "Stop listening" : "Voice input"}
-                                >
-                                  {voiceHandler.isListening ? <MicOff size={12} /> : <Mic size={12} />}
-                                </button>
-                              )}
-                            </label>
+                            <label className="text-xs font-bold text-gray-400 mb-2">Title</label>
                             <input 
                               value={props.newEventTitle} 
                               onChange={(e) => props.setNewEventTitle(e.target.value)} 
@@ -996,15 +911,6 @@ export const Chronos = React.memo(() => {
   const [planDate, setPlanDate] = useState("");
   const [planDuration, setPlanDuration] = useState("");
   const [planGoals, setPlanGoals] = useState("");
-
-  const handleVoiceResult = useCallback((transcript) => {
-    const parsed = parseNaturalLanguage(transcript);
-    setNewEventTitle(parsed.title);
-    setNewEventDate(parsed.date);
-    if (parsed.time) setNewEventTime(parsed.time);
-  }, []);
-
-  const voiceHandler = useVoiceRecognition(handleVoiceResult);
 
   const daysInMonth = new Date(currentDate.getFullYear(), currentDate.getMonth() + 1, 0).getDate();
   const firstDayOfMonth = new Date(currentDate.getFullYear(), currentDate.getMonth(), 1).getDay();
@@ -1198,9 +1104,11 @@ export const Chronos = React.memo(() => {
 
   const todayStr = formatDate(new Date());
 
+  // FIXED: Pad to exactly 42 days (6 rows of 7 days)
   const calendarDays = useMemo(() => {
     const days = Array(firstDayOfMonth).fill(null);
     for (let i = 1; i <= daysInMonth; i++) days.push(i);
+    while (days.length < 42) days.push(null);
     return days;
   }, [daysInMonth, firstDayOfMonth]);
 
@@ -1238,22 +1146,9 @@ export const Chronos = React.memo(() => {
                 onChange={(e) => setNaturalInput(e.target.value)}
                 onKeyDown={handleNaturalSubmit}
                 placeholder="Ask Chronos: 'Plan sprint for Physics', 'Meeting on Friday', or 'Call Mom at 5pm'..."
-                className="w-full bg-gradient-to-r from-[#0A0A0A] to-[#0C0C0C] border border-white/10 rounded-2xl py-4 pl-12 pr-28 text-sm text-white focus:outline-none focus:border-blue-500/50 focus:ring-2 focus:ring-blue-500/20 transition-all shadow-lg placeholder-gray-600"
+                className="w-full bg-gradient-to-r from-[#0A0A0A] to-[#0C0C0C] border border-white/10 rounded-2xl py-4 pl-12 pr-20 text-sm text-white focus:outline-none focus:border-blue-500/50 focus:ring-2 focus:ring-blue-500/20 transition-all shadow-lg placeholder-gray-600"
             />
             <div className="absolute right-4 top-1/2 -translate-y-1/2 flex items-center gap-2">
-              {voiceHandler.isSupported && (
-                <button
-                  onClick={voiceHandler.isListening ? voiceHandler.stopListening : voiceHandler.startListening}
-                  className={`p-2 rounded-lg transition-all ${
-                    voiceHandler.isListening 
-                      ? 'bg-red-500/20 text-red-400 animate-pulse' 
-                      : 'bg-white/5 text-gray-500 hover:text-white hover:bg-white/10'
-                  }`}
-                  title={voiceHandler.isListening ? "Stop listening" : "Voice input"}
-                >
-                  {voiceHandler.isListening ? <MicOff size={16} /> : <Mic size={16} />}
-                </button>
-              )}
               <div className="text-[10px] text-gray-600 border border-white/10 px-2 py-1 rounded-lg opacity-50 group-focus-within:opacity-100 transition-opacity font-mono font-bold">
                 ENTER
               </div>
@@ -1347,12 +1242,12 @@ export const Chronos = React.memo(() => {
         </motion.div>
 
         {/* Calendar View */}
-        <div className="flex-1 min-h-0 relative z-0">
+        <div className="flex-1 min-h-0 relative z-0 overflow-y-auto custom-scrollbar">
           {viewMode === 'month' ? (
             <motion.div 
               initial={{ opacity: 0 }}
               animate={{ opacity: 1 }}
-              className="h-full flex flex-col"
+              className="flex flex-col pb-6"
             >
                 <div className="grid grid-cols-7 gap-px mb-3">
                   {['Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday'].map(d => (
@@ -1361,7 +1256,8 @@ export const Chronos = React.memo(() => {
                     </div>
                   ))}
                 </div>
-                <div className="flex-1 grid grid-cols-7 grid-rows-5 gap-3">
+                {/* FIXED: 6 rows with proper height, scrollable */}
+                <div className="grid grid-cols-7 gap-3" style={{ gridTemplateRows: 'repeat(6, 120px)' }}>
                   {calendarDays.map((day, i) => {
                     const dateStr = day ? formatDate(new Date(currentDate.getFullYear(), currentDate.getMonth(), day)) : `empty-${i}`;
                     const events = eventsByDate[dateStr] || [];
@@ -1412,7 +1308,6 @@ export const Chronos = React.memo(() => {
         settings={settings}
         theme={theme}
         isLoading={isLoading}
-        voiceHandler={voiceHandler}
         newEventTitle={newEventTitle} setNewEventTitle={setNewEventTitle}
         newEventDate={newEventDate} setNewEventDate={setNewEventDate}
         newEventType={newEventType} setNewEventType={setNewEventType}
@@ -1424,6 +1319,24 @@ export const Chronos = React.memo(() => {
         planDuration={planDuration} setPlanDuration={setPlanDuration}
         planGoals={planGoals} setPlanGoals={setPlanGoals}
       />
+      
+      {/* Custom Scrollbar Styles */}
+      <style jsx>{`
+        .custom-scrollbar::-webkit-scrollbar {
+          width: 8px;
+          height: 8px;
+        }
+        .custom-scrollbar::-webkit-scrollbar-track {
+          background: transparent;
+        }
+        .custom-scrollbar::-webkit-scrollbar-thumb {
+          background: rgba(255, 255, 255, 0.1);
+          border-radius: 4px;
+        }
+        .custom-scrollbar::-webkit-scrollbar-thumb:hover {
+          background: rgba(255, 255, 255, 0.2);
+        }
+      `}</style>
     </div>
   );
 });

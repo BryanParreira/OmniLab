@@ -1,4 +1,4 @@
-import React, { createContext, useContext, useState, useEffect, useCallback, useReducer, useMemo, useRef } from 'react';
+import React, { createContext, useContext, useState, useEffect, useCallback, useReducer, useMemo } from 'react';
 import { v4 as uuidv4 } from 'uuid';
 
 const LuminaContext = createContext();
@@ -52,9 +52,11 @@ export const LuminaProvider = ({ children }) => {
       primary: isDev ? 'text-rose-500' : 'text-indigo-500',
       primaryBg: isDev ? 'bg-rose-600' : 'bg-indigo-600',
       primaryBorder: isDev ? 'border-rose-500/50' : 'border-indigo-500/50',
+      primaryText: isDev ? 'text-rose-500' : 'text-indigo-500',
       glow: isDev ? 'shadow-rose-500/20' : 'shadow-indigo-500/20',
       accentText: isDev ? 'text-rose-400' : 'text-indigo-400',
       softBg: isDev ? 'bg-rose-500/10' : 'bg-indigo-500/10',
+      softBorder: isDev ? 'border-rose-500/30' : 'border-indigo-500/30',
       hoverBg: isDev ? 'hover:bg-rose-500/20' : 'hover:bg-indigo-500/20',
       gradient: isDev ? 'from-rose-600 to-orange-600' : 'from-indigo-600 to-violet-600'
     };
@@ -86,9 +88,6 @@ export const LuminaProvider = ({ children }) => {
   const [undoHistory, setUndoHistory] = useState([]);
   const [redoHistory, setRedoHistory] = useState([]);
   const [currentInput, setCurrentInput] = useState('');
-  const [timeMachineSnapshots, setTimeMachineSnapshots] = useState([]);
-  const [currentSnapshotIndex, setCurrentSnapshotIndex] = useState(-1);
-  const [timeMachineOpen, setTimeMachineOpen] = useState(false);
   const [canvasNodes, setCanvasNodes] = useState([]);
   const [canvasConnections, setCanvasConnections] = useState([]);
   const [zenithFiles, setZenithFiles] = useState([]);
@@ -151,7 +150,7 @@ export const LuminaProvider = ({ children }) => {
         setCurrentView('chronos');
         break;
     }
-  }, [setCurrentView]);
+  }, []);
 
   useEffect(() => {
     const handleKeyDown = (e) => {
@@ -166,10 +165,6 @@ export const LuminaProvider = ({ children }) => {
       if ((e.metaKey || e.ctrlKey) && e.key === 'z' && e.shiftKey) {
         e.preventDefault();
         performRedo();
-      }
-      if ((e.metaKey || e.ctrlKey) && e.key === 't') {
-        e.preventDefault();
-        setTimeMachineOpen(prev => !prev);
       }
     };
     window.addEventListener('keydown', handleKeyDown);
@@ -268,20 +263,6 @@ export const LuminaProvider = ({ children }) => {
   }, [loadZenithFiles]);
 
   useEffect(() => {
-    if (!isInitialized) return;
-    const snapshotInterval = setInterval(() => createSnapshot(), 5 * 60 * 1000);
-    return () => clearInterval(snapshotInterval);
-  }, [isInitialized]);
-
-  useEffect(() => {
-    if (!isInitialized) return;
-    const debounce = setTimeout(() => {
-      if (canvasNodes.length > 0 || messages.length > 0) createSnapshot();
-    }, 2000);
-    return () => clearTimeout(debounce);
-  }, [canvasNodes, messages, calendarEvents, isInitialized]);
-
-  useEffect(() => {
     if (!window.lumina || !isInitialized) return;
     const cleanupChunk = window.lumina.onResponseChunk((chunk) => {
       if (chunk === '[DONE]') {
@@ -341,96 +322,8 @@ export const LuminaProvider = ({ children }) => {
     }
   }, []);
 
-  const createSnapshot = useCallback(() => {
-    const snapshot = {
-      id: uuidv4(),
-      timestamp: Date.now(),
-      data: {
-        canvasNodes: JSON.parse(JSON.stringify(canvasNodes)),
-        canvasConnections: JSON.parse(JSON.stringify(canvasConnections)),
-        messages: JSON.parse(JSON.stringify(messages)),
-        calendarEvents: JSON.parse(JSON.stringify(calendarEvents)),
-        activeProject: activeProject ? { ...activeProject } : null,
-        currentView
-      }
-    };
-
-    setTimeMachineSnapshots(prev => {
-      const updated = [...prev, snapshot].slice(-100);
-      try {
-        localStorage.setItem('timeMachineSnapshots', JSON.stringify(updated));
-      } catch (e) {}
-      return updated;
-    });
-
-    setCurrentSnapshotIndex(prev => prev + 1);
-  }, [canvasNodes, canvasConnections, messages, calendarEvents, activeProject, currentView]);
-
-  const restoreSnapshot = useCallback((index) => {
-    const snapshot = timeMachineSnapshots[index];
-    if (!snapshot) return;
-
-    setCanvasNodes(snapshot.data.canvasNodes);
-    setCanvasConnections(snapshot.data.canvasConnections);
-    messagesDispatch({ type: 'SET_MESSAGES', payload: snapshot.data.messages });
-    setCalendarEvents(snapshot.data.calendarEvents);
-    
-    if (snapshot.data.activeProject) {
-      setActiveProject(snapshot.data.activeProject);
-    }
-    
-    setCurrentView(snapshot.data.currentView);
-    setCurrentSnapshotIndex(index);
-
-    setTimeout(() => createSnapshot(), 100);
-  }, [timeMachineSnapshots, createSnapshot]);
-
-  const deleteSnapshot = useCallback((index) => {
-    setTimeMachineSnapshots(prev => {
-      const updated = prev.filter((_, i) => i !== index);
-      try {
-        localStorage.setItem('timeMachineSnapshots', JSON.stringify(updated));
-      } catch (e) {}
-      return updated;
-    });
-
-    if (currentSnapshotIndex >= index) {
-      setCurrentSnapshotIndex(prev => Math.max(0, prev - 1));
-    }
-  }, [currentSnapshotIndex]);
-
-  const exportSnapshot = useCallback((index) => {
-    const snapshot = timeMachineSnapshots[index];
-    if (!snapshot) return;
-
-    const dataStr = JSON.stringify(snapshot, null, 2);
-    const blob = new Blob([dataStr], { type: 'application/json' });
-    const url = URL.createObjectURL(blob);
-    const link = document.createElement('a');
-    link.download = `workspace-snapshot-${new Date(snapshot.timestamp).toISOString()}.json`;
-    link.href = url;
-    link.click();
-  }, [timeMachineSnapshots]);
-
-  const loadSnapshotsFromStorage = useCallback(() => {
-    try {
-      const stored = localStorage.getItem('timeMachineSnapshots');
-      if (stored) {
-        const snapshots = JSON.parse(stored);
-        setTimeMachineSnapshots(snapshots);
-        setCurrentSnapshotIndex(snapshots.length - 1);
-      }
-    } catch (e) {}
-  }, []);
-
-  useEffect(() => {
-    if (isInitialized) {
-      loadSnapshotsFromStorage();
-    }
-  }, [isInitialized, loadSnapshotsFromStorage]);
-
   // =========================================================================
-  // 🚀 ULTIMATE: PURE LIVE CONTEXT WITH DUAL-MODE LOGIC (FORGE VS NEXUS)
+  // 🚀 FIXED: DUAL-MODE CONTEXT ENGINE WITH CALENDAR FIX
   // =========================================================================
   const sendMessage = useCallback(async (text, attachments) => {
     const normalizedAttachments = Array.isArray(attachments) ? attachments : [];
@@ -469,173 +362,170 @@ export const LuminaProvider = ({ children }) => {
     setIsLoading(true);
 
     // ====================================================================
-    // DUAL-MODE CONTEXT ENGINE
+    // FIXED: DUAL-MODE CONTEXT ENGINE - NO LOOPS, NO HALLUCINATION
     // ====================================================================
     
-    // ====================================================================
-// DUAL-MODE CONTEXT ENGINE - FIXED VERSION
-// ====================================================================
+    const isForge = settings.developerMode;
+    let contextFiles = [];
+    let systemPrompt = settings.systemPrompt;
+    let pid = null;
+    let enrichedPrompt = text || '';
+    let workspaceContext = "";
 
-const isForge = settings.developerMode;
-let contextFiles = [];
-let systemPrompt = settings.systemPrompt;
-let pid = null;
-let enrichedPrompt = text || '';
-let workspaceContext = "";
+    const lowerText = (text || '').toLowerCase();
 
-const lowerText = text.toLowerCase();
-
-// ----------------------------------------------------------------
-// MODE 1: THE FORGE (Developer Mode)
-// ----------------------------------------------------------------
-if (isForge) {
-  // 1. Prioritize Active Project
-  if (activeProject) {
-    pid = activeProject.id;
-    const liveProject = projects.find(p => p.id === activeProject.id);
-    
-    if (liveProject) {
-      contextFiles = (liveProject.files || []).filter(f => 
-        !f.name.endsWith('.meta.json') && !f.name.startsWith('.')
-      );
-      systemPrompt = liveProject.systemPrompt || settings.systemPrompt;
-      
-      workspaceContext += `[ACTIVE PROJECT: "${liveProject.name}" | ${contextFiles.length} files loaded]\n`;
-      
-      // Git Status
-      if (window.lumina.getGitStatus) {
-        try {
-          const status = await window.lumina.getGitStatus(activeProject.id);
-          if (status) {
-            workspaceContext += `[Git: ${status.current} | Modified: ${status.modified.length}]\n`;
+    // ----------------------------------------------------------------
+    // MODE 1: THE FORGE (Developer Mode)
+    // ----------------------------------------------------------------
+    if (isForge) {
+      // 1. Prioritize Active Project
+      if (activeProject) {
+        pid = activeProject.id;
+        const liveProject = projects.find(p => p.id === activeProject.id);
+        
+        if (liveProject) {
+          contextFiles = (liveProject.files || []).filter(f => 
+            !f.name.endsWith('.meta.json') && !f.name.startsWith('.')
+          );
+          systemPrompt = liveProject.systemPrompt || settings.systemPrompt;
+          
+          workspaceContext += `[ACTIVE PROJECT: "${liveProject.name}" | ${contextFiles.length} files loaded]\n`;
+          
+          // Git Status
+          if (window.lumina.getGitStatus) {
+            try {
+              const status = await window.lumina.getGitStatus(activeProject.id);
+              if (status) {
+                workspaceContext += `[Git: ${status.current} | Modified: ${status.modified.length}]\n`;
+              }
+            } catch (e) {}
           }
-        } catch (e) {}
-      }
-    }
-  }
-
-  // 2. Canvas Context
-  if (canvasNodes.length > 0) {
-    workspaceContext += `\n[Canvas Architecture: ${canvasNodes.length} nodes]\n`;
-    canvasNodes.slice(0, 10).forEach(node => {
-      workspaceContext += `• ${node.data.title} (${node.type})\n`;
-    });
-  }
-  
-  // 3. Artifacts
-  if (artifacts.length > 0) {
-     workspaceContext += `\n[Open Artifacts]\n`;
-     artifacts.forEach(a => workspaceContext += `• ${a.title} (${a.language})\n`);
-  }
-} 
-// ----------------------------------------------------------------
-// MODE 2: THE NEXUS (Student/Research Mode) - FIXED
-// ----------------------------------------------------------------
-else {
-  // 1. Zenith Documents - Only if explicitly requested
-  if (lowerText.includes('document') || lowerText.includes('file') || lowerText.includes('zenith')) {
-    if (zenithFiles.length > 0) {
-      const recentFiles = zenithFiles
-        .sort((a, b) => new Date(b.modified) - new Date(a.modified))
-        .slice(0, 5);
-      
-      workspaceContext += `[Available Documents (${zenithFiles.length} total)]\n`;
-      
-      for (const file of recentFiles) {
-        try {
-          const content = await window.lumina.readFile(file.name);
-          const preview = content.slice(0, 500);
-          workspaceContext += `\n--- ${file.name} ---\n${preview}...\n`;
-        } catch (e) {
-          workspaceContext += `• ${file.name}\n`;
         }
       }
-    }
-  }
 
-  // 2. Calendar - FIXED: Always load if exists, make it directly accessible
-  if (calendarEvents.length > 0) {
-    // Check if user is asking about calendar/schedule/events
-    const isCalendarQuery = lowerText.includes('calendar') || 
-                           lowerText.includes('event') || 
-                           lowerText.includes('schedule') ||
-                           lowerText.includes('deadline') ||
-                           lowerText.includes('appointment');
-    
-    if (isCalendarQuery) {
-      // User is EXPLICITLY asking about calendar - provide full access
-      workspaceContext += `\n[YOUR CALENDAR EVENTS]\n`;
-      
-      const now = new Date();
-      const sorted = [...calendarEvents].sort((a, b) => 
-        new Date(a.date) - new Date(b.date)
-      );
-      
-      // Separate past and future
-      const upcoming = sorted.filter(e => new Date(e.date) >= now);
-      const past = sorted.filter(e => new Date(e.date) < now);
-      
-      if (upcoming.length > 0) {
-        workspaceContext += `\nUpcoming Events (${upcoming.length}):\n`;
-        upcoming.forEach(e => {
-          workspaceContext += `• ${e.date} at ${e.time || 'all day'}: ${e.title} [${e.priority} priority] (${e.type})\n`;
-          if (e.notes) workspaceContext += `  Notes: ${e.notes}\n`;
+      // 2. Canvas Context
+      if (canvasNodes.length > 0) {
+        workspaceContext += `\n[Canvas Architecture: ${canvasNodes.length} nodes]\n`;
+        canvasNodes.slice(0, 10).forEach(node => {
+          workspaceContext += `• ${node.data.title} (${node.type})\n`;
         });
       }
       
-      if (past.length > 0 && lowerText.includes('past')) {
-        workspaceContext += `\nPast Events (${past.length}):\n`;
-        past.slice(-5).forEach(e => {
-          workspaceContext += `• ${e.date}: ${e.title}\n`;
-        });
+      // 3. Artifacts
+      if (artifacts.length > 0) {
+        workspaceContext += `\n[Open Artifacts]\n`;
+        artifacts.forEach(a => workspaceContext += `• ${a.title} (${a.language})\n`);
       }
-      
-      if (upcoming.length === 0) {
-        workspaceContext += `\nYou have no upcoming events scheduled.\n`;
+    } 
+    // ----------------------------------------------------------------
+    // MODE 2: THE NEXUS (Student/Research Mode) - FIXED
+    // ----------------------------------------------------------------
+    else {
+      // 1. Zenith Documents - Only if explicitly requested
+      if (lowerText.includes('document') || lowerText.includes('file') || lowerText.includes('zenith')) {
+        if (zenithFiles.length > 0) {
+          const recentFiles = zenithFiles
+            .sort((a, b) => new Date(b.modified) - new Date(a.modified))
+            .slice(0, 5);
+          
+          workspaceContext += `[Available Documents (${zenithFiles.length} total)]\n`;
+          
+          for (const file of recentFiles) {
+            try {
+              const content = await window.lumina.readFile(file.name);
+              const preview = content.slice(0, 500);
+              workspaceContext += `\n--- ${file.name} ---\n${preview}...\n`;
+            } catch (e) {
+              workspaceContext += `• ${file.name}\n`;
+            }
+          }
+        }
       }
-    } else {
-      // User is NOT asking about calendar, but we'll keep a subtle context
-      const now = new Date();
-      const urgent = calendarEvents
-        .filter(e => {
-          const eventDate = new Date(e.date);
-          const daysUntil = (eventDate - now) / (1000 * 60 * 60 * 24);
-          return daysUntil >= 0 && daysUntil <= 7 && e.priority === 'high';
-        })
-        .slice(0, 3);
-      
-      if (urgent.length > 0) {
-        workspaceContext += `\n[Note: You have ${urgent.length} urgent deadline(s) this week]\n`;
+
+      // 2. Calendar - FIXED: Direct access when asked
+      if (calendarEvents.length > 0) {
+        const isCalendarQuery = lowerText.includes('calendar') || 
+                               lowerText.includes('event') || 
+                               lowerText.includes('schedule') ||
+                               lowerText.includes('deadline') ||
+                               lowerText.includes('appointment') ||
+                               lowerText.includes('when') ||
+                               lowerText.includes('what') && (lowerText.includes('today') || lowerText.includes('tomorrow') || lowerText.includes('week'));
+        
+        if (isCalendarQuery) {
+          // User is EXPLICITLY asking about calendar - provide full access
+          workspaceContext += `\n[YOUR CALENDAR EVENTS]\n`;
+          
+          const now = new Date();
+          const sorted = [...calendarEvents].sort((a, b) => 
+            new Date(a.date) - new Date(b.date)
+          );
+          
+          // Separate past and future
+          const upcoming = sorted.filter(e => new Date(e.date) >= now);
+          const past = sorted.filter(e => new Date(e.date) < now);
+          
+          if (upcoming.length > 0) {
+            workspaceContext += `\nUpcoming Events (${upcoming.length}):\n`;
+            upcoming.forEach(e => {
+              workspaceContext += `• ${e.date} at ${e.time || 'all day'}: ${e.title} [${e.priority} priority] (${e.type})\n`;
+              if (e.notes) workspaceContext += `  Notes: ${e.notes}\n`;
+            });
+          }
+          
+          if (past.length > 0 && lowerText.includes('past')) {
+            workspaceContext += `\nPast Events (${past.length}):\n`;
+            past.slice(-5).forEach(e => {
+              workspaceContext += `• ${e.date}: ${e.title}\n`;
+            });
+          }
+          
+          if (upcoming.length === 0) {
+            workspaceContext += `\nYou have no upcoming events scheduled.\n`;
+          }
+        } else {
+          // User is NOT asking about calendar, but keep subtle context
+          const now = new Date();
+          const urgent = calendarEvents
+            .filter(e => {
+              const eventDate = new Date(e.date);
+              const daysUntil = (eventDate - now) / (1000 * 60 * 60 * 24);
+              return daysUntil >= 0 && daysUntil <= 7 && e.priority === 'high';
+            })
+            .slice(0, 3);
+          
+          if (urgent.length > 0) {
+            workspaceContext += `\n[Note: You have ${urgent.length} urgent deadline(s) this week]\n`;
+          }
+        }
+      }
+
+      // 3. Code Projects - IGNORE unless explicitly requested
+      if (activeProject && (lowerText.includes('code') || lowerText.includes('project'))) {
+        workspaceContext += `\n[Note: Project "${activeProject.name}" available on request]\n`;
       }
     }
-  }
 
-  // 3. IGNORE Code Projects unless explicitly requested
-  if (activeProject && (lowerText.includes('code') || lowerText.includes('project'))) {
-     workspaceContext += `\n[Note: Project "${activeProject.name}" available on request]\n`;
-  }
-}
+    // === CONVERSATION MEMORY ===
+    if (messages.length > 0) {
+      const recentHistory = messages.slice(-6).map(msg => 
+        `${msg.role === 'user' ? 'USER' : 'ASSISTANT'}: ${msg.content.slice(0, 400)}`
+      ).join('\n\n');
+      enrichedPrompt = `[CONVERSATION HISTORY]\n${recentHistory}\n\n[CURRENT QUERY]\n${enrichedPrompt}`;
+    }
 
-// === CONVERSATION MEMORY ===
-if (messages.length > 0) {
-  const recentHistory = messages.slice(-6).map(msg => 
-    `${msg.role === 'user' ? 'USER' : 'ASSISTANT'}: ${msg.content.slice(0, 400)}`
-  ).join('\n\n');
-  enrichedPrompt = `[CONVERSATION HISTORY]\n${recentHistory}\n\n[CURRENT QUERY]\n${enrichedPrompt}`;
-}
+    // === WORKSPACE CONTEXT ===
+    if (workspaceContext) {
+      enrichedPrompt = workspaceContext + '\n' + enrichedPrompt;
+    }
 
-// === WORKSPACE CONTEXT ===
-if (workspaceContext) {
-  enrichedPrompt = workspaceContext + '\n' + enrichedPrompt;
-}
+    // === PERSONALITY & GUARDRAILS - FIXED ===
+    const isDev = settings.developerMode;
+    const tonePrompt = isDev 
+        ? `You are FORGE: A precise, technical senior engineer. Answer directly and accurately.` 
+        : `You are NEXUS: A warm, helpful research assistant. Answer questions directly using available data.`;
 
-// === PERSONALITY & GUARDRAILS - FIXED ===
-const isDev = settings.developerMode;
-const tonePrompt = isDev 
-    ? `You are FORGE: A precise, technical senior engineer. Answer directly and accurately.` 
-    : `You are NEXUS: A warm, helpful research assistant. Answer questions directly using available data.`;
-
-const systemInstructions = `
+    const systemInstructions = `
 ${tonePrompt}
 
 CRITICAL INSTRUCTIONS:
@@ -649,14 +539,14 @@ CRITICAL INSTRUCTIONS:
 Context data above is YOUR WORKING MEMORY - use it naturally.
 `;
 
-enrichedPrompt = systemInstructions + "\n\n" + enrichedPrompt;
+    enrichedPrompt = systemInstructions + "\n\n" + enrichedPrompt;
     
     // === SEND TO AI ===
     try {
       window.lumina.sendPrompt(
         enrichedPrompt, 
         currentModel, 
-        contextFiles, // Only populated if Forge Mode or explicitly requested
+        contextFiles,
         systemPrompt, 
         settings, 
         pid, 
@@ -1101,7 +991,6 @@ enrichedPrompt = systemInstructions + "\n\n" + enrichedPrompt;
     openGlobalSettings: () => setIsSettingsOpen(true), closeGlobalSettings: () => setIsSettingsOpen(false), isSettingsOpen,
     commandPaletteOpen, setCommandPaletteOpen, undoHistory, redoHistory, performUndo, performRedo, addToUndoHistory,
     currentInput, setCurrentInput, handleContextNavigation,
-    timeMachineSnapshots, currentSnapshotIndex, setCurrentSnapshotIndex, timeMachineOpen, setTimeMachineOpen, createSnapshot, restoreSnapshot, deleteSnapshot, exportSnapshot,
     zenithFiles, loadZenithFiles,
     togglePodcast: () => {
       if (isSpeaking) {
@@ -1114,7 +1003,7 @@ enrichedPrompt = systemInstructions + "\n\n" + enrichedPrompt;
         setIsSpeaking(true);
       }
     }
-  }), [messages, sendMessage, isLoading, isOllamaRunning, currentModel, availableModels, settings, updateSettings, refreshModels, factoryReset, theme, isInitialized, sessions, sessionId, startNewChat, loadSession, deleteSession, renameChat, projects, activeProject, createProject, deleteProject, updateProjectSettings, addFiles, addFolder, addUrl, openFile, deleteFile, generateDossier, loadProjects, canvasNodes, addCanvasNode, updateCanvasNode, deleteCanvasNode, canvasConnections, calendarEvents, addEvent, updateEvent, deleteEvent, generateSchedule, currentView, gitStatus, activeArtifact, activeArtifactId, artifacts, openLabBench, closeLabBench, closeArtifact, runFlashpoint, runBlueprint, runDiffDoctor, runDeepResearch, isSettingsOpen, commandPaletteOpen, undoHistory, redoHistory, performUndo, performRedo, addToUndoHistory, currentInput, handleContextNavigation, timeMachineSnapshots, currentSnapshotIndex, timeMachineOpen, createSnapshot, restoreSnapshot, deleteSnapshot, exportSnapshot, zenithFiles, loadZenithFiles, isSpeaking]);
+  }), [messages, sendMessage, isLoading, isOllamaRunning, currentModel, availableModels, settings, updateSettings, refreshModels, factoryReset, theme, isInitialized, sessions, sessionId, startNewChat, loadSession, deleteSession, renameChat, projects, activeProject, createProject, deleteProject, updateProjectSettings, addFiles, addFolder, addUrl, openFile, deleteFile, generateDossier, loadProjects, canvasNodes, addCanvasNode, updateCanvasNode, deleteCanvasNode, canvasConnections, calendarEvents, addEvent, updateEvent, deleteEvent, generateSchedule, currentView, gitStatus, activeArtifact, activeArtifactId, artifacts, openLabBench, closeLabBench, closeArtifact, runFlashpoint, runBlueprint, runDiffDoctor, runDeepResearch, isSettingsOpen, commandPaletteOpen, undoHistory, redoHistory, performUndo, performRedo, addToUndoHistory, currentInput, handleContextNavigation, zenithFiles, loadZenithFiles, isSpeaking]);
 
   return <LuminaContext.Provider value={contextValue}>{children}</LuminaContext.Provider>;
 };

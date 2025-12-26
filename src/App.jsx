@@ -1,4 +1,4 @@
-import React, { useEffect } from 'react';
+import React from 'react';
 import { CommandBar } from "./components/CommandBar"; 
 import { Sidebar } from "./components/Sidebar";
 import { Workspace } from "./components/Workspace";
@@ -10,10 +10,8 @@ import { Zenith } from "./components/Zenith";
 import { Settings } from "./components/Settings";
 import { CommandPalette } from "./components/CommandPalette";
 import { DailyDashboard } from "./components/DailyDashboard";
-import { TimeMachine } from "./components/TimeMachine";
 import { OnboardingTour } from "./components/OnboardingTour";
 import { LuminaProvider, useLumina } from "./context/LuminaContext";
-import { AnimatePresence } from 'framer-motion';
 
 const MainContent = () => {
   const { currentView } = useLumina();
@@ -60,9 +58,7 @@ const AppContent = () => {
     isSettingsOpen, 
     closeGlobalSettings, 
     commandPaletteOpen, 
-    setCommandPaletteOpen,
-    timeMachineOpen,
-    setTimeMachineOpen
+    setCommandPaletteOpen
   } = useLumina();
   
   return (
@@ -84,16 +80,7 @@ const AppContent = () => {
         onClose={() => setCommandPaletteOpen(false)} 
       />
 
-      <AnimatePresence>
-        {timeMachineOpen && (
-          <TimeMachine
-            isOpen={timeMachineOpen}
-            onClose={() => setTimeMachineOpen(false)}
-          />
-        )}
-      </AnimatePresence>
-
-      {/* ✅ NEW: Onboarding Tour - Auto-shows on first launch */}
+      {/* Onboarding Tour - Auto-shows on first launch */}
       <OnboardingTour />
     </>
   );
