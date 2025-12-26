@@ -1,182 +1,297 @@
-import React, { useMemo } from 'react';
-import { motion } from 'framer-motion';
-import { Sparkles, ArrowRight, Calendar, MessageSquare, Layout, PenTool, Clock, Target, TrendingUp } from 'lucide-react';
+import React, { useState, useEffect } from 'react';
+import { motion, AnimatePresence } from 'framer-motion';
+import { Sparkles, TrendingUp, Calendar, MessageSquare, Layout, X, ChevronRight, Loader2 } from 'lucide-react';
 import { useLumina } from '../context/LuminaContext';
 
-const getSuggestions = (sessions, projects, calendarEvents, canvasNodes, theme) => {
-  const suggestions = [];
-  const now = new Date();
+export const SmartSuggestion = () => {
+  const {
+    sessions,
+    projects,
+    calendarEvents,
+    canvasNodes,
+    setCurrentView,
+    loadSession,
+    setActiveProject,
+    theme,
+    settings,
+  } = useLumina();
 
-  // Check for upcoming deadlines
-  const upcomingDeadlines = (calendarEvents || []).filter(e => {
-    if (!e || !e.date || e.type !== 'deadline') return false;
-    const eventDate = new Date(e.date);
-    const daysUntil = Math.ceil((eventDate - now) / (1000 * 60 * 60 * 24));
-    return daysUntil >= 0 && daysUntil <= 3;
-  });
+  const [suggestions, setSuggestions] = useState([]);
+  const [isVisible, setIsVisible] = useState(true);
+  const [isGenerating, setIsGenerating] = useState(true);
 
-  if (upcomingDeadlines.length > 0) {
-    const deadline = upcomingDeadlines[0];
-    suggestions.push({
-      id: 'upcoming-deadline',
-      icon: Target,
-      title: 'Deadline Approaching',
-      description: `"${deadline.title}" is due soon. Plan your work in Canvas or schedule tasks in Chronos.`,
-      action: 'chronos',
-      actionLabel: 'View Schedule',
-      priority: 'high',
-      gradient: 'from-red-500/20 to-orange-500/20',
-      border: 'border-red-500/30'
-    });
-  }
+  useEffect(() => {
+    const timer = setTimeout(() => {
+      const generatedSuggestions = generateSuggestions();
+      setSuggestions(generatedSuggestions);
+      setIsGenerating(false);
+    }, 1500);
 
-  // Check for inactive projects
-  const activeProjects = (projects || []).filter(p => p && p.files && p.files.length > 0);
-  if (activeProjects.length > 0 && activeProjects.length < 3) {
-    suggestions.push({
-      id: 'work-on-project',
-      icon: TrendingUp,
-      title: 'Continue Your Work',
-      description: `You have ${activeProjects.length} active project${activeProjects.length !== 1 ? 's' : ''}. Keep the momentum going!`,
-      action: 'dashboard',
-      actionLabel: 'Open Projects',
-      priority: 'medium',
-      gradient: 'from-blue-500/20 to-cyan-500/20',
-      border: 'border-blue-500/30'
-    });
-  }
+    return () => clearTimeout(timer);
+  }, [sessions, projects, calendarEvents, canvasNodes, settings]);
 
-  // Check recent chat activity
-  const recentChats = (sessions || []).filter(s => {
-    if (!s || !s.date) return false;
-    const sessionDate = new Date(s.date);
-    const daysSince = Math.ceil((now - sessionDate) / (1000 * 60 * 60 * 24));
-    return daysSince <= 1;
-  });
+  const generateSuggestions = () => {
+    const suggestions = [];
+    const now = new Date();
+    const today = now.toISOString().split('T')[0];
 
-  if (recentChats.length > 0) {
-    suggestions.push({
-      id: 'review-insights',
-      icon: MessageSquare,
-      title: 'Review Recent Insights',
-      description: `You had ${recentChats.length} conversation${recentChats.length !== 1 ? 's' : ''} recently. Capture key insights in Canvas or Zenith.`,
-      action: 'chat',
-      actionLabel: 'Open Chats',
-      priority: 'low',
-      gradient: 'from-green-500/20 to-emerald-500/20',
-      border: 'border-green-500/30'
-    });
-  }
+    // Check for upcoming deadlines (within 3 days)
+    const upcomingDeadlines = calendarEvents?.filter(event => {
+      if (!event?.date || event.type !== 'deadline') return false;
+      const eventDate = new Date(event.date);
+      const daysUntil = Math.ceil((eventDate - now) / (1000 * 60 * 60 * 24));
+      return daysUntil >= 0 && daysUntil <= 3;
+    }) || [];
 
-  // Check for empty canvas
-  if (!canvasNodes || canvasNodes.length === 0) {
-    suggestions.push({
-      id: 'start-canvas',
-      icon: Layout,
-      title: 'Visualize Your Ideas',
-      description: 'Start mapping your thoughts in Canvas. Create mind maps, flowcharts, or brainstorm new concepts.',
-      action: 'canvas',
-      actionLabel: 'Open Canvas',
-      priority: 'medium',
-      gradient: 'from-purple-500/20 to-pink-500/20',
-      border: 'border-purple-500/30'
-    });
-  }
-
-  // Check for today's events
-  const todayStr = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}-${String(now.getDate()).padStart(2, '0')}`;
-  const todayEvents = (calendarEvents || []).filter(e => e && e.date === todayStr);
-  
-  if (todayEvents.length === 0) {
-    suggestions.push({
-      id: 'plan-day',
-      icon: Calendar,
-      title: 'Plan Your Day',
-      description: 'No events scheduled for today. Add tasks, meetings, or goals to stay organized.',
-      action: 'chronos',
-      actionLabel: 'Open Calendar',
-      priority: 'low',
-      gradient: 'from-amber-500/20 to-orange-500/20',
-      border: 'border-amber-500/30'
-    });
-  }
-
-  // Default suggestion if nothing else applies
-  if (suggestions.length === 0) {
-    suggestions.push({
-      id: 'explore-features',
-      icon: Sparkles,
-      title: 'Explore More Features',
-      description: 'Try out Canvas for visual thinking, Zenith for writing, or Chronos for planning.',
-      action: 'canvas',
-      actionLabel: 'Get Started',
-      priority: 'low',
-      gradient: 'from-indigo-500/20 to-purple-500/20',
-      border: 'border-indigo-500/30'
-    });
-  }
-
-  // Sort by priority
-  const priorityOrder = { high: 0, medium: 1, low: 2 };
-  return suggestions.sort((a, b) => priorityOrder[a.priority] - priorityOrder[b.priority]).slice(0, 2);
-};
-
-export const SmartSuggestions = () => {
-  const { sessions, projects, calendarEvents, canvasNodes, setCurrentView, theme } = useLumina();
-
-  const suggestions = useMemo(
-    () => getSuggestions(sessions, projects, calendarEvents, canvasNodes, theme),
-    [sessions, projects, calendarEvents, canvasNodes, theme]
-  );
-
-  const handleAction = (action) => {
-    if (setCurrentView) {
-      setCurrentView(action);
+    if (upcomingDeadlines.length > 0) {
+      const deadline = upcomingDeadlines[0];
+      const daysUntil = Math.ceil((new Date(deadline.date) - now) / (1000 * 60 * 60 * 24));
+      suggestions.push({
+        id: 'deadline-reminder',
+        type: 'urgent',
+        icon: Calendar,
+        title: `Deadline approaching: ${deadline.title}`,
+        description: `Due ${daysUntil === 0 ? 'today' : `in ${daysUntil} day${daysUntil > 1 ? 's' : ''}`}`,
+        action: () => setCurrentView('chronos'),
+        actionLabel: 'View in Chronos',
+        gradient: 'from-red-500 to-orange-500',
+      });
     }
+
+    // Check for inactive projects that need attention
+    const activeProjects = projects?.filter(p => p?.files?.length > 0) || [];
+    const staleProjects = projects?.filter(p => {
+      if (!p?.updatedAt) return false;
+      const lastUpdate = new Date(p.updatedAt);
+      const daysSinceUpdate = Math.ceil((now - lastUpdate) / (1000 * 60 * 60 * 24));
+      return daysSinceUpdate > 7 && p.files?.length > 0;
+    }) || [];
+
+    if (staleProjects.length > 0 && activeProjects.length > 0) {
+      const project = staleProjects[0];
+      suggestions.push({
+        id: 'stale-project',
+        type: 'info',
+        icon: TrendingUp,
+        title: `Continue working on "${project.name}"`,
+        description: 'No activity in the past week',
+        action: () => {
+          setActiveProject(project);
+          setCurrentView('dashboard');
+        },
+        actionLabel: 'Open Project',
+        gradient: 'from-blue-500 to-cyan-500',
+      });
+    }
+
+    // Check today's events
+    const todaysEvents = calendarEvents?.filter(e => e?.date === today) || [];
+    const nextEvent = todaysEvents.find(e => {
+      if (!e.time) return false;
+      const [hours, minutes] = e.time.split(':').map(Number);
+      const eventTime = new Date(now);
+      eventTime.setHours(hours, minutes, 0);
+      return eventTime > now;
+    });
+
+    if (nextEvent) {
+      suggestions.push({
+        id: 'next-event',
+        type: 'info',
+        icon: Calendar,
+        title: `Upcoming: ${nextEvent.title}`,
+        description: `Scheduled at ${nextEvent.time}`,
+        action: () => setCurrentView('chronos'),
+        actionLabel: 'View Schedule',
+        gradient: 'from-purple-500 to-pink-500',
+      });
+    }
+
+    // Suggest creating a new project if user has none
+    if (!projects || projects.length === 0) {
+      suggestions.push({
+        id: 'create-first-project',
+        type: 'tip',
+        icon: Layout,
+        title: 'Create your first project',
+        description: 'Organize your work with project contexts',
+        action: () => {
+          const name = prompt('Project name:');
+          if (name) {
+            window.dispatchEvent(new CustomEvent('create-project', { detail: { name } }));
+          }
+        },
+        actionLabel: 'Create Project',
+        gradient: 'from-green-500 to-emerald-500',
+      });
+    }
+
+    // Suggest using Canvas if user has projects but no canvas nodes
+    if (activeProjects.length > 0 && (!canvasNodes || canvasNodes.length === 0)) {
+      suggestions.push({
+        id: 'try-canvas',
+        type: 'tip',
+        icon: Layout,
+        title: 'Visualize your projects',
+        description: 'Try the Canvas to map out your ideas',
+        action: () => setCurrentView('canvas'),
+        actionLabel: 'Open Canvas',
+        gradient: 'from-amber-500 to-yellow-500',
+      });
+    }
+
+    // Suggest catching up on recent chats
+    const recentSessions = sessions?.filter(s => {
+      if (!s?.date) return false;
+      const sessionDate = new Date(s.date);
+      const daysSince = Math.ceil((now - sessionDate) / (1000 * 60 * 60 * 24));
+      return daysSince <= 7;
+    }) || [];
+
+    if (recentSessions.length > 5) {
+      suggestions.push({
+        id: 'review-chats',
+        type: 'tip',
+        icon: MessageSquare,
+        title: 'You\'ve been busy!',
+        description: `${recentSessions.length} conversations this week`,
+        action: () => setCurrentView('chat'),
+        actionLabel: 'Review Chats',
+        gradient: 'from-indigo-500 to-purple-500',
+      });
+    }
+
+    // Developer mode specific suggestions
+    if (settings.developerMode) {
+      const hasGitProjects = projects?.some(p => p.isGitRepo) || false;
+      if (!hasGitProjects && activeProjects.length > 0) {
+        suggestions.push({
+          id: 'git-init',
+          type: 'tip',
+          icon: TrendingUp,
+          title: 'Initialize Git for version control',
+          description: 'Track changes and collaborate better',
+          action: () => setCurrentView('dashboard'),
+          actionLabel: 'Learn More',
+          gradient: 'from-orange-500 to-red-500',
+        });
+      }
+    }
+
+    // General productivity tip if no other suggestions
+    if (suggestions.length === 0) {
+      const tips = [
+        {
+          title: 'Try the Command Palette',
+          description: 'Press ⌘K for quick actions anywhere',
+          action: () => window.dispatchEvent(new KeyboardEvent('keydown', { key: 'k', metaKey: true })),
+          actionLabel: 'Try It',
+        },
+        {
+          title: 'Explore Zenith',
+          description: 'Distraction-free writing with AI assistance',
+          action: () => setCurrentView('zenith'),
+          actionLabel: 'Open Zenith',
+        },
+        {
+          title: 'Plan your week',
+          description: 'Use Chronos to schedule your tasks',
+          action: () => setCurrentView('chronos'),
+          actionLabel: 'Open Chronos',
+        },
+      ];
+
+      const randomTip = tips[Math.floor(Math.random() * tips.length)];
+      suggestions.push({
+        id: 'productivity-tip',
+        type: 'tip',
+        icon: Sparkles,
+        ...randomTip,
+        gradient: 'from-cyan-500 to-blue-500',
+      });
+    }
+
+    return suggestions.slice(0, 3);
   };
 
+  if (!isVisible || suggestions.length === 0) return null;
+
   return (
-    <div className="space-y-3">
-      {suggestions.map((suggestion, index) => {
-        const Icon = suggestion.icon;
-        return (
-          <motion.div
-            key={suggestion.id}
-            initial={{ opacity: 0, y: 10 }}
-            animate={{ opacity: 1, y: 0 }}
-            transition={{ delay: index * 0.1 }}
-            className={`group p-5 rounded-2xl bg-gradient-to-br ${suggestion.gradient} border ${suggestion.border} hover:border-white/20 transition-all cursor-pointer backdrop-blur-sm`}
-            onClick={() => handleAction(suggestion.action)}
-          >
-            <div className="flex items-start gap-4">
-              <div className={`p-3 rounded-xl bg-gradient-to-br ${theme.gradient} shadow-lg shrink-0`}>
-                <Icon size={20} className="text-white" />
-              </div>
-              
-              <div className="flex-1 min-w-0">
-                <div className="flex items-center gap-2 mb-1">
-                  <h4 className="text-sm font-bold text-white">{suggestion.title}</h4>
-                  {suggestion.priority === 'high' && (
-                    <span className="px-2 py-0.5 rounded-full bg-red-500/20 border border-red-500/30 text-[10px] font-bold text-red-400">
-                      URGENT
-                    </span>
-                  )}
-                </div>
-                <p className="text-xs text-gray-400 leading-relaxed mb-3">
-                  {suggestion.description}
-                </p>
-                
-                <button className="flex items-center gap-2 text-xs font-bold text-indigo-400 group-hover:text-indigo-300 transition-all">
-                  {suggestion.actionLabel}
-                  <ArrowRight size={12} className="group-hover:translate-x-1 transition-transform" />
-                </button>
-              </div>
+    <AnimatePresence>
+      <motion.div
+        initial={{ opacity: 0, y: 10 }}
+        animate={{ opacity: 1, y: 0 }}
+        exit={{ opacity: 0, y: -10 }}
+        className="space-y-3"
+      >
+        <div className="flex items-center justify-between">
+          <div className="flex items-center gap-2">
+            <div className="p-1.5 rounded-lg bg-gradient-to-br from-indigo-500/10 to-purple-500/10 border border-indigo-500/20">
+              <Sparkles size={14} className="text-indigo-400" />
             </div>
-          </motion.div>
-        );
-      })}
-    </div>
+            <h3 className="text-xs font-bold text-white uppercase tracking-wider">
+              {isGenerating ? 'Analyzing...' : 'Suggested Next Actions'}
+            </h3>
+          </div>
+          <button
+            onClick={() => setIsVisible(false)}
+            className="p-1.5 rounded-lg hover:bg-white/5 text-gray-500 hover:text-white transition-all"
+            title="Dismiss suggestions"
+          >
+            <X size={14} />
+          </button>
+        </div>
+
+        {isGenerating ? (
+          <div className="p-6 rounded-xl bg-gradient-to-br from-[#0A0A0A] to-[#111] border border-white/10 flex items-center justify-center">
+            <Loader2 size={20} className="text-indigo-400 animate-spin" />
+          </div>
+        ) : (
+          <div className="space-y-2">
+            {suggestions.map((suggestion, index) => (
+              <SuggestionCard
+                key={suggestion.id}
+                suggestion={suggestion}
+                index={index}
+                theme={theme}
+              />
+            ))}
+          </div>
+        )}
+      </motion.div>
+    </AnimatePresence>
   );
 };
 
-export default SmartSuggestions;
+const SuggestionCard = ({ suggestion, index, theme }) => {
+  const Icon = suggestion.icon;
+
+  return (
+    <motion.div
+      initial={{ opacity: 0, x: -20 }}
+      animate={{ opacity: 1, x: 0 }}
+      transition={{ delay: index * 0.1 }}
+      whileHover={{ scale: 1.02 }}
+      onClick={suggestion.action}
+      className="p-4 rounded-xl bg-gradient-to-br from-[#0A0A0A] to-[#111] border border-white/10 hover:border-white/20 cursor-pointer transition-all group"
+    >
+      <div className="flex items-start gap-3">
+        <div className={`p-2.5 rounded-lg bg-gradient-to-br ${suggestion.gradient} bg-opacity-10 border border-white/10 group-hover:scale-110 transition-transform`}>
+          <Icon size={18} className="text-white" />
+        </div>
+        <div className="flex-1 min-w-0">
+          <div className="flex items-center gap-2 mb-1">
+            <h4 className="text-sm font-bold text-white group-hover:text-transparent group-hover:bg-clip-text group-hover:bg-gradient-to-r group-hover:from-white group-hover:to-gray-400 transition-all">
+              {suggestion.title}
+            </h4>
+          </div>
+          <p className="text-xs text-gray-500 mb-2">{suggestion.description}</p>
+          <div className="flex items-center gap-2 text-xs text-gray-400 group-hover:text-white transition-colors">
+            <span className="font-medium">{suggestion.actionLabel}</span>
+            <ChevronRight size={12} />
+          </div>
+        </div>
+      </div>
+    </motion.div>
+  );
+};

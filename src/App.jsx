@@ -11,6 +11,7 @@ import { Settings } from "./components/Settings";
 import { CommandPalette } from "./components/CommandPalette";
 import { DailyDashboard } from "./components/DailyDashboard";
 import { TimeMachine } from "./components/TimeMachine";
+import { OnboardingTour } from "./components/OnboardingTour";
 import { LuminaProvider, useLumina } from "./context/LuminaContext";
 import { AnimatePresence } from 'framer-motion';
 
@@ -91,6 +92,9 @@ const AppContent = () => {
           />
         )}
       </AnimatePresence>
+
+      {/* ✅ NEW: Onboarding Tour - Auto-shows on first launch */}
+      <OnboardingTour />
     </>
   );
 };

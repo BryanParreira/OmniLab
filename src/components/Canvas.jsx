@@ -106,7 +106,7 @@ const ContextMenu = ({ x, y, onClose, items }) => {
 };
 
 // --- MINI MAP COMPONENT ---
-const MiniMap = ({ nodes, pan, zoom, containerSize, onNavigate }) => {
+const MiniMap = ({ nodes, connections, pan, zoom, containerSize, onNavigate }) => {
   const mapSize = 200;
   const scale = 0.05;
   
@@ -148,6 +148,25 @@ const MiniMap = ({ nodes, pan, zoom, containerSize, onNavigate }) => {
       >
         <rect width={mapSize} height={mapSize} fill="#0a0a0a" />
         
+        {/* Connections */}
+        {connections && connections.map((conn, i) => {
+          const from = nodes.find(n => n.id === conn.from);
+          const to = nodes.find(n => n.id === conn.to);
+          if (!from || !to) return null;
+          return (
+            <line
+              key={i}
+              x1={from.x * scale}
+              y1={from.y * scale}
+              x2={to.x * scale}
+              y2={to.y * scale}
+              stroke="rgba(255,255,255,0.1)"
+              strokeWidth="1"
+            />
+          );
+        })}
+        
+        {/* Nodes */}
         {nodes.map((node, i) => (
           <rect
             key={i}
@@ -168,6 +187,7 @@ const MiniMap = ({ nodes, pan, zoom, containerSize, onNavigate }) => {
           />
         ))}
         
+        {/* Viewport */}
         <rect
           x={viewportRect.x}
           y={viewportRect.y}
@@ -275,7 +295,6 @@ const CanvasNode = React.memo(({
     onDuplicate,
     onSpark, 
     onStartConnection,
-    onLock,
     onShowContext
 }) => {
     const [showSparkMenu, setShowSparkMenu] = useState(false);
@@ -671,6 +690,8 @@ const CanvasNode = React.memo(({
         prev.zoom === next.zoom
     );
 });
+
+CanvasNode.displayName = 'CanvasNode';
 
 // --- MAIN CANVAS COMPONENT ---
 export const Canvas = () => {
@@ -1566,6 +1587,7 @@ export const Canvas = () => {
           {canvasNodes.length > 0 && (
             <MiniMap 
               nodes={canvasNodes}
+              connections={canvasConnections}
               pan={pan}
               zoom={zoom}
               containerSize={containerSize}
@@ -1671,3 +1693,5 @@ export const Canvas = () => {
     </div>
   );
 };
+
+Canvas.displayName = 'Canvas';

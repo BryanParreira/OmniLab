@@ -214,13 +214,6 @@ const parseICS = (icsContent) => {
       const categoryMatch = block.match(/CATEGORIES:(.+?)(?:\n|$)/);
       const priorityMatch = block.match(/PRIORITY:(\d)/);
       
-      console.log(`Event ${i} matches:`, {
-        summary: summaryMatch?.[1],
-        date: dateMatch?.[1],
-        category: categoryMatch?.[1],
-        priority: priorityMatch?.[1]
-      });
-      
       if (summaryMatch && dateMatch) {
         const dateStr = dateMatch[1];
         const year = dateStr.substring(0, 4);
@@ -260,10 +253,7 @@ const parseICS = (icsContent) => {
           time: ''
         };
         
-        console.log(`✅ Parsed event ${i}:`, event);
         events.push(event);
-      } else {
-        console.warn(`⚠️ Event ${i} missing required fields (summary or date)`);
       }
     } catch (error) {
       console.error(`❌ Error parsing event block ${i}:`, error);
@@ -483,8 +473,11 @@ const CalendarDay = React.memo(({ day, dateStr, dayEvents, isToday, theme, onDay
   );
 });
 
-// --- WEEK VIEW COMPONENT ---
-const WeekView = React.memo(({ currentDate, eventsByDate, theme, onEventClick }) => {
+// --- ENHANCED WEEK VIEW COMPONENT WITH TIME SLOTS ---
+const WeekView = React.memo(({ currentDate, eventsByDate, theme, onEventClick, onDropEvent, onTimeSlotClick }) => {
+  const [draggedEvent, setDraggedEvent] = useState(null);
+  const [dragOverSlot, setDragOverSlot] = useState(null);
+
   const weekDates = useMemo(() => {
     const days = [];
     const curr = new Date(currentDate);
@@ -496,11 +489,39 @@ const WeekView = React.memo(({ currentDate, eventsByDate, theme, onEventClick })
     return days;
   }, [currentDate]);
 
-  const hours = Array.from({ length: 15 }, (_, i) => i + 7);
+  const hours = Array.from({ length: 18 }, (_, i) => i + 6); // 6am to 11pm
+
+  const handleDragStart = (e, event) => {
+    setDraggedEvent(event);
+    e.dataTransfer.effectAllowed = 'move';
+  };
+
+  const handleDragOver = (e, date, hour) => {
+    e.preventDefault();
+    e.dataTransfer.dropEffect = 'move';
+    const dateStr = formatDate(date);
+    setDragOverSlot({ date: dateStr, hour });
+  };
+
+  const handleDrop = (e, date, hour) => {
+    e.preventDefault();
+    if (draggedEvent && onDropEvent) {
+      const newDate = formatDate(date);
+      const newTime = `${String(hour).padStart(2, '0')}:00`;
+      onDropEvent(draggedEvent.id, newDate, newTime);
+    }
+    setDraggedEvent(null);
+    setDragOverSlot(null);
+  };
+
+  const handleDragLeave = () => {
+    setDragOverSlot(null);
+  };
 
   return (
     <div className="flex flex-col h-full bg-gradient-to-br from-[#0A0A0A] to-[#0C0C0C] border border-white/[0.08] rounded-2xl overflow-hidden shadow-2xl">
-      <div className="grid grid-cols-8 border-b border-white/10 bg-gradient-to-r from-[#111] to-[#0F0F0F]">
+      {/* Week Header */}
+      <div className="grid grid-cols-[80px_repeat(7,1fr)] border-b border-white/10 bg-gradient-to-r from-[#111] to-[#0F0F0F]">
         <div className="p-3 border-r border-white/10 bg-[#080808]"></div>
         {weekDates.map((date, i) => {
           const isToday = formatDate(date) === formatDate(new Date());
@@ -515,51 +536,91 @@ const WeekView = React.memo(({ currentDate, eventsByDate, theme, onEventClick })
         })}
       </div>
 
+      {/* Time Grid */}
       <div className="flex-1 overflow-y-auto custom-scrollbar relative">
-        <div className="grid grid-cols-8">
-           <div className="border-r border-white/10 bg-[#080808]">
+        <div className="grid grid-cols-[80px_repeat(7,1fr)]">
+           {/* Time Labels Column */}
+           <div className="border-r border-white/10 bg-[#080808] sticky left-0 z-10">
               {hours.map(hour => (
-                <div key={hour} className="h-16 border-b border-white/[0.05] text-[9px] text-gray-600 p-2 text-right font-mono font-bold">
-                  {hour > 12 ? `${hour - 12} PM` : hour === 12 ? '12 PM' : `${hour} AM`}
+                <div key={hour} className="h-20 border-b border-white/[0.05] text-[9px] text-gray-600 p-2 text-right font-mono font-bold">
+                  {hour > 12 ? `${hour - 12} PM` : hour === 12 ? '12 PM' : hour === 0 ? '12 AM' : `${hour} AM`}
                 </div>
               ))}
            </div>
            
-           {weekDates.map((date, i) => {
+           {/* Day Columns with Time Slots */}
+           {weekDates.map((date, dayIndex) => {
              const dStr = formatDate(date);
              const dayEvents = eventsByDate[dStr] || [];
              
              return (
-              <div key={i} className="border-r border-white/[0.05] last:border-r-0 relative group hover:bg-white/[0.02] transition-colors">
-                {hours.map(h => <div key={h} className="h-16 border-b border-white/[0.03]"></div>)}
+              <div key={dayIndex} className="border-r border-white/[0.05] last:border-r-0 relative group hover:bg-white/[0.01] transition-colors">
+                {/* Hour Slots */}
+                {hours.map(hour => {
+                  const isDragOver = dragOverSlot?.date === dStr && dragOverSlot?.hour === hour;
+                  
+                  return (
+                    <div
+                      key={hour}
+                      className={`h-20 border-b border-white/[0.03] relative transition-all ${
+                        isDragOver ? 'bg-blue-500/20 border-blue-500/50' : 'hover:bg-white/5'
+                      }`}
+                      onDragOver={(e) => handleDragOver(e, date, hour)}
+                      onDrop={(e) => handleDrop(e, date, hour)}
+                      onDragLeave={handleDragLeave}
+                      onClick={() => onTimeSlotClick && onTimeSlotClick(dStr, `${String(hour).padStart(2, '0')}:00`)}
+                    >
+                      {isDragOver && (
+                        <div className="absolute inset-0 border-2 border-blue-500 border-dashed rounded-lg m-1 flex items-center justify-center bg-blue-500/10">
+                          <span className="text-xs text-blue-400 font-bold">Drop here</span>
+                        </div>
+                      )}
+                    </div>
+                  );
+                })}
                 
-                <AnimatePresence>
-                  {dayEvents.map((ev, idx) => {
-                    let top = 0;
-                    if (ev.time) {
-                      const [h, m] = ev.time.split(':').map(Number);
-                      if (h >= 7 && h <= 21) {
-                         const minutesFrom7 = (h - 7) * 60 + m;
-                         top = (minutesFrom7 / (15 * 60)) * 100;
+                {/* Events Overlay */}
+                <div className="absolute inset-0 pointer-events-none">
+                  <AnimatePresence>
+                    {dayEvents.map((ev, idx) => {
+                      let top = 0;
+                      let height = 60;
+                      
+                      if (ev.time) {
+                        const [h, m] = ev.time.split(':').map(Number);
+                        if (h >= 6 && h <= 23) {
+                           const minutesFrom6 = (h - 6) * 60 + m;
+                           top = (minutesFrom6 / 60) * 80; // 80px per hour
+                        }
                       }
-                    }
-                    
-                    return (
-                      <motion.div 
-                        key={idx}
-                        initial={{ opacity: 0, scale: 0.9 }}
-                        animate={{ opacity: 1, scale: 1 }}
-                        exit={{ opacity: 0, scale: 0.9 }}
-                        onClick={(e) => { e.stopPropagation(); onEventClick(ev); }}
-                        className={`absolute left-1 right-1 p-2 rounded-lg text-[9px] border leading-tight overflow-hidden cursor-pointer hover:brightness-125 hover:scale-105 z-10 transition-all ${getEventColor(ev.type, theme.isDev)} backdrop-blur-sm shadow-lg`}
-                        style={{ top: `${top}%`, height: '40px' }} 
-                      >
-                        <div className="font-bold truncate">{ev.title}</div>
-                        {ev.time && <div className="text-[8px] opacity-70 font-mono">{ev.time}</div>}
-                      </motion.div>
-                    );
-                  })}
-                </AnimatePresence>
+                      
+                      return (
+                        <motion.div 
+                          key={idx}
+                          draggable
+                          onDragStart={(e) => handleDragStart(e, ev)}
+                          initial={{ opacity: 0, scale: 0.9 }}
+                          animate={{ opacity: 1, scale: 1 }}
+                          exit={{ opacity: 0, scale: 0.9 }}
+                          onClick={(e) => { e.stopPropagation(); onEventClick(ev); }}
+                          className={`absolute left-1 right-1 p-2 rounded-lg text-[9px] border leading-tight overflow-hidden cursor-grab active:cursor-grabbing hover:brightness-125 hover:scale-[1.02] z-20 transition-all ${getEventColor(ev.type, theme.isDev)} backdrop-blur-sm shadow-lg pointer-events-auto`}
+                          style={{ top: `${top}px`, height: `${height}px` }} 
+                        >
+                          <div className="font-bold truncate flex items-center gap-1">
+                            <GripHorizontal size={8} className="opacity-50" />
+                            {ev.title}
+                          </div>
+                          {ev.time && <div className="text-[8px] opacity-70 font-mono mt-0.5">{ev.time}</div>}
+                          {ev.priority === 'high' && (
+                            <div className="absolute top-1 right-1">
+                              <AlertCircle size={8} className="opacity-70" />
+                            </div>
+                          )}
+                        </motion.div>
+                      );
+                    })}
+                  </AnimatePresence>
+                </div>
               </div>
              );
            })}
@@ -995,21 +1056,23 @@ export const Chronos = React.memo(() => {
       }
   };
 
-  const handleDropEvent = useCallback((eventId, targetDate) => {
+  const handleDropEvent = useCallback((eventId, targetDate, targetTime) => {
       const event = calendarEvents.find(e => e.id === eventId);
       
       if (event && updateEvent) {
-          updateEvent(eventId, { ...event, date: targetDate });
-          showNotification(`"${event.title}" moved to ${formatFriendlyDate(targetDate)}`);
+          const updates = { date: targetDate };
+          if (targetTime) updates.time = targetTime;
+          updateEvent(eventId, updates);
+          showNotification(`"${event.title}" moved to ${formatFriendlyDate(targetDate)}${targetTime ? ` at ${targetTime}` : ''}`);
       }
   }, [calendarEvents, updateEvent]);
 
-  const openNewEvent = (dateStr) => {
+  const openNewEvent = (dateStr, time) => {
       setEditingEvent(null);
       setIsPlanning(false);
       setNewEventTitle("");
       setNewEventDate(dateStr || formatDate(new Date()));
-      setNewEventTime("");
+      setNewEventTime(time || "");
       setNewEventNotes("");
       setIsModalOpen(true);
   };
@@ -1080,15 +1143,11 @@ export const Chronos = React.memo(() => {
     input.onchange = (e) => {
       const file = e.target.files[0];
       if (file) {
-        console.log('📁 File selected:', file.name);
         const reader = new FileReader();
         reader.onload = (event) => {
           try {
             const icsContent = event.target.result;
-            console.log('📄 File content loaded, length:', icsContent.length);
-            
             const importedEvents = parseICS(icsContent);
-            console.log('🔍 Parsed events:', importedEvents);
             
             if (importedEvents.length === 0) {
               showNotification("❌ No events found in calendar file");
@@ -1096,30 +1155,20 @@ export const Chronos = React.memo(() => {
             }
             
             let successCount = 0;
-            let failCount = 0;
             
-            importedEvents.forEach((evt, index) => {
+            importedEvents.forEach((evt) => {
               try {
-                console.log(`Adding event ${index + 1}/${importedEvents.length}:`, evt);
-                
                 if (typeof addEvent === 'function') {
                   addEvent(evt.title, evt.date, evt.type, evt.priority, evt.notes, evt.time);
                   successCount++;
-                  console.log(`✅ Successfully added: ${evt.title}`);
-                } else {
-                  console.error('❌ addEvent function not available');
-                  failCount++;
                 }
               } catch (error) {
                 console.error('❌ Error adding event:', evt.title, error);
-                failCount++;
               }
             });
             
-            console.log(`Import complete: ${successCount} success, ${failCount} failed`);
-            
             if (successCount > 0) {
-              showNotification(`✅ Successfully imported ${successCount} event(s)${failCount > 0 ? ` (${failCount} failed)` : ''}`);
+              showNotification(`✅ Successfully imported ${successCount} event(s)`);
             } else {
               showNotification("❌ Failed to import events");
             }
@@ -1128,15 +1177,11 @@ export const Chronos = React.memo(() => {
             showNotification("❌ Error importing calendar file");
           }
         };
-        reader.onerror = (error) => {
-          console.error('❌ Error reading file:', error);
-          showNotification("❌ Error reading calendar file");
-        };
         reader.readAsText(file);
       }
     };
     input.click();
-  }, [addEvent, showNotification]);
+  }, [addEvent]);
 
   const closeModal = () => {
     setIsModalOpen(false); setIsPlanning(false); setEditingEvent(null);
@@ -1346,6 +1391,8 @@ export const Chronos = React.memo(() => {
                   eventsByDate={eventsByDate} 
                   theme={{...theme, isDev: settings.developerMode}} 
                   onEventClick={openEditEvent}
+                  onDropEvent={handleDropEvent}
+                  onTimeSlotClick={openNewEvent}
                />
              </motion.div>
           )}
@@ -1380,3 +1427,5 @@ export const Chronos = React.memo(() => {
     </div>
   );
 });
+
+Chronos.displayName = 'Chronos';

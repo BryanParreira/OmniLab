@@ -8,6 +8,8 @@ import {
   CheckCircle2, Star, Code2, PenTool
 } from 'lucide-react';
 import { motion, AnimatePresence } from 'framer-motion';
+import { SmartSuggestion } from './SmartSuggestion';
+import { ProgressVisualization } from './ProgressVisualization';
 
 // --- HELPER: TIME AGO ---
 const getTimeAgo = (date) => {
@@ -487,6 +489,12 @@ export const DailyDashboard = () => {
             gradient="from-amber-500/20 to-orange-500/20"
           />
         </div>
+
+        {/* Smart Suggestions - NEW */}
+        <SmartSuggestion />
+
+        {/* Progress Visualization - NEW */}
+        <ProgressVisualization />
 
         {/* Main Content Grid */}
         <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">

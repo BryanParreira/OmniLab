@@ -6,7 +6,7 @@ import {
   Wand2, Scissors, CheckCircle2, FolderPlus, ArrowRight,
   FileText, Download, Copy, ChevronDown,
   Zap, ListOrdered, BookOpen, Hash, Code2, Palette, Settings,
-  Eye, EyeOff, Type, Minus, Plus, RotateCcw, Layers,
+  Minus, Plus, RotateCcw, Layers,
   Clock, Target, TrendingUp, Activity, Flame, Wind, X
 } from 'lucide-react';
 import { motion, AnimatePresence } from 'framer-motion';
@@ -626,6 +626,8 @@ export const Zenith = () => {
                 )}
               </AnimatePresence>
             </div>
+
+
         </div>
 
         <div className="flex items-center gap-3">
@@ -891,52 +893,52 @@ export const Zenith = () => {
       </AnimatePresence>
 
       {/* EDITOR AREA */}
-      <div 
-        className="flex-1 overflow-y-auto custom-scrollbar relative flex justify-center z-10"
-      >
-         <div className={`w-full max-w-4xl transition-all duration-700 ease-in-out ${
-           isFocusMode ? 'py-32 px-16' : 'py-16 px-12'
-         }`}>
-             
-             {/* Title Input */}
-             <motion.input
-                initial={{ opacity: 0, y: 20 }}
-                animate={{ opacity: 1, y: 0 }}
-                transition={{ delay: 0.1 }}
-                value={title}
-                onChange={(e) => setTitle(e.target.value)}
-                onClick={(e) => e.stopPropagation()}
-                placeholder="Untitled Masterpiece"
-                style={{ fontSize: `${fontSize * 2}px` }}
-                className="w-full bg-transparent font-bold text-white placeholder-gray-800 outline-none mb-8 tracking-tight leading-tight transition-all"
-                autoComplete="off"
-             />
+      <div className="flex-1 overflow-hidden relative flex z-10">
+        <div className="w-full overflow-y-auto custom-scrollbar relative flex justify-center">
+          <div className={`w-full max-w-4xl transition-all duration-700 ease-in-out ${
+            isFocusMode ? 'py-32 px-16' : 'py-16 px-12'
+          }`}>
+            
+            {/* Title Input */}
+            <motion.input
+              initial={{ opacity: 0, y: 20 }}
+              animate={{ opacity: 1, y: 0 }}
+              transition={{ delay: 0.1 }}
+              value={title}
+              onChange={(e) => setTitle(e.target.value)}
+              onClick={(e) => e.stopPropagation()}
+              placeholder="Untitled Masterpiece"
+              style={{ fontSize: `${fontSize * 2}px` }}
+              className="w-full bg-transparent font-bold text-white placeholder-gray-800 outline-none mb-8 tracking-tight leading-tight transition-all"
+              autoComplete="off"
+            />
 
-             {/* Content Editor */}
-             <motion.div 
-                initial={{ opacity: 0, y: 20 }}
-                animate={{ opacity: 1, y: 0 }}
-                transition={{ delay: 0.2 }}
-                className="relative font-serif text-gray-300 transition-all"
-                onClick={() => textareaRef.current?.focus()}
-                style={{ 
-                  fontSize: `${fontSize}px`,
-                  lineHeight: lineHeight
-                }}
-             >
-                <textarea
-                    ref={textareaRef}
-                    value={content}
-                    onChange={(e) => { setContent(e.target.value); setGhostText(""); }}
-                    onKeyDown={handleKeyDown}
-                    onSelect={handleSelect}
-                    placeholder="Start writing... (Press ⌘J for AI suggestions)"
-                    className="w-full min-h-[60vh] bg-transparent outline-none resize-none placeholder-gray-800 focus:placeholder-gray-700 caret-blue-500 overflow-hidden selection:bg-blue-500/20"
-                    spellCheck={false}
-                    autoComplete="off"
-                />
-             </motion.div>
-         </div>
+            {/* Content Editor */}
+            <motion.div 
+              initial={{ opacity: 0, y: 20 }}
+              animate={{ opacity: 1, y: 0 }}
+              transition={{ delay: 0.2 }}
+              className="relative font-serif text-gray-300 transition-all"
+              onClick={() => textareaRef.current?.focus()}
+              style={{ 
+                fontSize: `${fontSize}px`,
+                lineHeight: lineHeight
+              }}
+            >
+              <textarea
+                ref={textareaRef}
+                value={content}
+                onChange={(e) => { setContent(e.target.value); setGhostText(""); }}
+                onKeyDown={handleKeyDown}
+                onSelect={handleSelect}
+                placeholder="Start writing... (Press ⌘J for AI suggestions)"
+                className="w-full min-h-[60vh] bg-transparent outline-none resize-none placeholder-gray-800 focus:placeholder-gray-700 caret-blue-500 overflow-hidden selection:bg-blue-500/20"
+                spellCheck={false}
+                autoComplete="off"
+              />
+            </motion.div>
+          </div>
+        </div>
       </div>
 
       {/* --- AI OVERLAYS --- */}
@@ -1060,3 +1062,5 @@ export const Zenith = () => {
     </div>
   );
 };
+
+Zenith.displayName = 'Zenith';
